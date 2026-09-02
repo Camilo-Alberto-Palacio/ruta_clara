@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import FloatingHeader from './components/organisms/FloatingHeader';
 import RoutePlanner from './components/organisms/RoutePlanner';
 import SimulatorPanel from './components/organisms/SimulatorPanel';
@@ -102,8 +102,9 @@ export default function App() {
     const [navSpeedMultiplier, setNavSpeedMultiplier] = useState(1);
     const [navStatus, setNavStatus] = useState('stopped');
     const [speedKmh, setSpeedKmh] = useState(0);
-    const [hudRecommendation, setHudRecommendation] = useState('Haz clic en Iniciar para comenzar la navegación simulada.');
+    const [hudRecommendation, setHudRecommendation] = useState('Haz clic en Iniciar para comenzar la navegación.');
     const [nextTrafficLight, setNextTrafficLight] = useState(null);
+    const lastRiskLevelRef = useRef('Bajo');
 
     // Mobile popover states and bottom sheet active tab
     const [mobileLayersOpen, setMobileLayersOpen] = useState(false);
@@ -355,6 +356,16 @@ export default function App() {
                     return (distDeg * 111000) <= 45;
                 });
 
+                const currentRisk = riskInfo.level;
+                if (lastRiskLevelRef.current === 'Alto' && currentRisk !== 'Alto') {
+                    setHudRecommendation('🟢 Zona segura alcanzada. Has salido del sector de riesgo.');
+                    audioGuidance.speakEvent('danger_zone_exit', 'Has salido de la zona de riesgo. Vía segura.', 20, true);
+                } else if (currentRisk === 'Alto' && lastRiskLevelRef.current !== 'Alto') {
+                    setHudRecommendation('⚠️ Sector con alerta de seguridad. Mantente en movimiento.');
+                    audioGuidance.speakEvent('high_risk_zone', 'Zona de precaución. Mantén el pedaleo.', 40, true);
+                }
+                lastRiskLevelRef.current = currentRisk;
+
                 if (nearbyConst) {
                     setHudRecommendation('🚧 Obras viales del IDU adelante. Precaución.');
                     audioGuidance.speakEvent(`const_${nearbyConst.lat}`, 'Obras viales adelante.', 50);
@@ -362,9 +373,6 @@ export default function App() {
                     const tipo = nearbyReport.properties.tipo_novedad;
                     setHudRecommendation(`📢 Reporte ciudadano: ${tipo}`);
                     audioGuidance.speakEvent(`rep_${nearbyReport.id}`, `Reporte en la vía: ${tipo}.`, 45);
-                } else if (riskInfo.level === 'Alto') {
-                    setHudRecommendation('⚠️ Sector con alerta de seguridad. Mantente en movimiento.');
-                    audioGuidance.speakEvent('high_risk_zone', 'Zona de precaución. Mantén el pedaleo.', 60);
                 } else if (simulationState.weather === 'lluvia') {
                     setHudRecommendation('🌧️ Calzada mojada por lluvias. Conduce con cuidado.');
                     audioGuidance.speakEvent('rain_warning', 'Calzada resbaladiza.', 90);
@@ -426,24 +434,25 @@ export default function App() {
                 citizenReports
             );
 
-            if (riskInfo.level === 'Alto') {
-                setHudRecommendation('⚠️ Sector con alto índice de hurto. Evita detenerte y mantente en alerta.');
-            } else if (simulationState.weather === 'lluvia') {
-                setHudRecommendation('🌧️ Calzada resbaladiza por lluvias. Conduce con precaución.');
-            } else {
-                setHudRecommendation('🚴 Navegando en tiempo real. Sigue la ruta.');
+            const currentRisk = riskInfo.level;
+            if (lastRiskLevelRef.current === 'Alto' && currentRisk !== 'Alto') {
+                setHudRecommendation('🟢 Zona segura alcanzada. Has salido del sector de riesgo.');
+                audioGuidance.speakEvent('danger_zone_exit_gps', 'Has salido de la zona de riesgo. Vía segura.', 20, true);
+            } else if (currentRisk === 'Alto' && lastRiskLevelRef.current !== 'Alto') {
+                setHudRecommendation('⚠️ Sector con alerta de seguridad. Mantente en movimiento.');
+                audioGuidance.speakEvent('high_risk_zone_gps', 'Zona de precaución. Mantén el pedaleo.', 40, true);
             }
+            lastRiskLevelRef.current = currentRisk;
         };
 
-        const handleError = (error) => {
-            console.error("GPS Watch Error:", error);
-            alert("No se pudo acceder a tu ubicación GPS. Activando simulación.");
-            setNavigationMode('simulated');
+        const handleError = (err) => {
+            console.warn("GPS error:", err.message);
         };
 
         const watchId = navigator.geolocation.watchPosition(handleSuccess, handleError, {
             enableHighAccuracy: true,
-            maximumAge: 0
+            maximumAge: 1000,
+            timeout: 5000
         });
 
         return () => navigator.geolocation.clearWatch(watchId);
@@ -1089,194 +1098,152 @@ export default function App() {
 
 
 
+    // ETA Calculation helper for Waze bottom bar
+    const getEstimatedArrivalTime = (durationMinutes) => {
+        const now = new Date();
+        now.setMinutes(now.getMinutes() + parseInt(durationMinutes || '15', 10));
+        return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    };
+
     const cockpitHUD = isNavigating && activeRoute && (
-        <div className="cockpit-hud-overlay animate-slide-up">
-            <div className="hud-header">
-                <div className="hud-stat-box">
-                    <span className="hud-stat-label">VELOCIDAD</span>
-                    <span className="hud-stat-value">{speedKmh} <span className="hud-unit">km/h</span></span>
+        <div className="fixed inset-0 pointer-events-none z-50 flex flex-col justify-between p-4 animate-fade-in select-none">
+            {/* 1. Waze-style Top Navigation Maneuver Banner */}
+            <div className="pointer-events-auto max-w-md w-full mx-auto bg-slate-950/92 backdrop-blur-md text-white rounded-2xl shadow-2xl p-3.5 border border-slate-800 flex items-center gap-3.5 animate-slide-down">
+                <div className="w-12 h-12 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center flex-shrink-0 shadow-inner">
+                    <i className="fa-solid fa-arrow-turn-up text-2xl text-cyan-400"></i>
                 </div>
-                
-                <div className="hud-stat-box">
-                    <span className="hud-stat-label">DISTANCIA</span>
-                    <span className="hud-stat-value">
-                        {activeRoute.distanceKm} <span className="hud-unit">km</span>
-                    </span>
-                </div>
-
-                <div className="hud-stat-box">
-                    <span className="hud-stat-label">INTERSECCIÓN</span>
-                    {nextTrafficLight ? (
-                        <span className="hud-stat-value" style={{ 
-                            color: nextTrafficLight.state === 'verde' ? '#10b981' : (nextTrafficLight.state === 'amarillo' ? '#eab308' : '#ef4444'),
-                            textShadow: nextTrafficLight.state === 'verde' ? '0 0 10px rgba(16,185,129,0.5)' : (nextTrafficLight.state === 'amarillo' ? '0 0 10px rgba(234,179,8,0.5)' : '0 0 10px rgba(239,68,68,0.5)')
-                        }}>
-                            <i className="fa-solid fa-traffic-light"></i> {nextTrafficLight.state.toUpperCase()}
+                <div className="flex flex-col flex-1 overflow-hidden">
+                    <div className="flex items-baseline gap-1.5">
+                        <span className="text-xl font-extrabold text-white tracking-tight">
+                            {Math.max(15, Math.round((1 - (cyclistIndex / Math.max(1, activeRoute.coordinates.length))) * (parseFloat(activeRoute.distanceKm) * 1000)))} m
                         </span>
-                    ) : (
-                        <span className="hud-stat-value text-muted">-</span>
-                    )}
-                </div>
-
-                <div className="hud-stat-box">
-                    <span className="hud-stat-label">MODO</span>
-                    <span className="hud-stat-value" style={{ 
-                        fontSize: '0.85rem', 
-                        fontWeight: '700', 
-                        color: navigationMode === 'gps' ? '#06b6d4' : '#10b981',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.25rem'
-                    }}>
-                        <i className={navigationMode === 'gps' ? "fa-solid fa-satellite-dish" : "fa-solid fa-desktop"}></i> {navigationMode === 'gps' ? 'GPS' : 'SIM'}
+                        <span className="text-2xs text-slate-400 uppercase font-bold">hacia</span>
+                    </div>
+                    <span className="text-xs font-bold text-cyan-400 truncate">
+                        {destInput ? destInput.split(',')[0] : 'Destino'}
+                    </span>
+                    <span className="text-[10px] text-slate-300 font-semibold mt-0.5 truncate flex items-center gap-1">
+                        {hudRecommendation}
                     </span>
                 </div>
+                {nextTrafficLight && (
+                    <div className="flex flex-col items-center justify-center px-2.5 py-1 rounded-xl bg-slate-900 border border-slate-800 flex-shrink-0">
+                        <i className="fa-solid fa-traffic-light text-base" style={{
+                            color: nextTrafficLight.state === 'verde' ? '#10b981' : (nextTrafficLight.state === 'amarillo' ? '#eab308' : '#ef4444')
+                        }}></i>
+                        <span className="text-[9px] font-bold uppercase mt-0.5" style={{
+                            color: nextTrafficLight.state === 'verde' ? '#10b981' : (nextTrafficLight.state === 'amarillo' ? '#eab308' : '#ef4444')
+                        }}>{nextTrafficLight.state}</span>
+                    </div>
+                )}
             </div>
 
-            <div className="hud-recommendation-banner">
-                <p className="hud-rec-text">{hudRecommendation}</p>
-            </div>
+            {/* 2. Floating Circular Speedometer Widget (Lower Left - Waze style) */}
+            <div className="flex justify-between items-end w-full max-w-lg mx-auto mb-2">
+                <div className="pointer-events-auto w-16 h-16 rounded-full bg-slate-950/85 backdrop-blur-md border-2 border-cyan-500/80 shadow-xl flex flex-col items-center justify-center text-white">
+                    <span className="text-lg font-black tracking-tight leading-none text-white">{speedKmh}</span>
+                    <span className="text-[9px] font-bold text-cyan-400 uppercase leading-none mt-0.5">km/h</span>
+                </div>
 
-            {/* Simulación Play/Pause y Velocidad inline o mensaje GPS */}
-            {navigationMode === 'simulated' ? (
-                <div className="hud-controls-row flex items-center justify-center gap-4 my-1 z-10" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem', margin: '0.25rem 0' }}>
-                    {navStatus === 'running' && (
+                {/* Quick Simulation Pause/Speed controls floating on right */}
+                {navigationMode === 'simulated' && (
+                    <div className="pointer-events-auto flex items-center gap-1.5 bg-slate-950/85 backdrop-blur-md p-1.5 rounded-2xl border border-slate-800 shadow-xl">
                         <button
-                            className="btn-flat btn-flat-warning"
-                            onClick={() => setNavStatus('paused')}
-                            style={{ padding: '0.4rem 1rem', display: 'flex', alignItems: 'center', gap: '0.35rem', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer', border: '1px solid rgba(234, 179, 8, 0.3)', background: 'rgba(234, 179, 8, 0.15)', color: '#fef08a' }}
+                            onClick={() => setNavStatus(navStatus === 'running' ? 'paused' : 'running')}
+                            className="w-8 h-8 rounded-xl bg-slate-800 text-white flex items-center justify-center cursor-pointer border-none text-xs"
+                            title={navStatus === 'running' ? "Pausar" : "Reanudar"}
                         >
-                            <i className="fa-solid fa-pause"></i> Pausar
-                    </button>
-                    )}
-                    {navStatus === 'paused' && (
-                        <button
-                            className="btn-flat btn-flat-primary"
-                            onClick={() => setNavStatus('running')}
-                            style={{ padding: '0.4rem 1rem', display: 'flex', alignItems: 'center', gap: '0.35rem', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer', border: 'none', background: 'var(--accent-gradient)', color: '#ffffff' }}
-                        >
-                            <i className="fa-solid fa-play"></i> Reanudar
+                            <i className={`fa-solid ${navStatus === 'running' ? 'fa-pause text-amber-400' : 'fa-play text-emerald-400'}`}></i>
                         </button>
-                    )}
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', background: 'rgba(15, 23, 42, 0.4)', padding: '0.2rem 0.4rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.08)' }}>
-                        <span style={{ fontSize: '0.65rem', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', marginRight: '0.25rem' }}>Velocidad:</span>
                         {[1, 2, 5].map(mult => (
                             <button
                                 key={mult}
                                 onClick={() => setNavSpeedMultiplier(mult)}
-                                style={{
-                                    padding: '0.2rem 0.5rem',
-                                    borderRadius: '4px',
-                                    background: navSpeedMultiplier === mult ? 'var(--accent-color, #10b981)' : 'transparent',
-                                    color: navSpeedMultiplier === mult ? '#ffffff' : '#94a3b8',
-                                    border: 'none',
-                                    fontSize: '0.65rem',
-                                    fontWeight: '700',
-                                    cursor: 'pointer',
-                                    transition: 'all 0.2s ease'
-                                }}
+                                className={`px-2 py-1 rounded-lg text-2xs font-extrabold cursor-pointer border-none ${
+                                    navSpeedMultiplier === mult ? 'bg-cyan-500 text-white shadow-xs' : 'bg-transparent text-slate-400 hover:text-white'
+                                }`}
                             >
                                 {mult}x
                             </button>
                         ))}
                     </div>
-                    {/* Voice Guidance Controls & Voice Selector */}
-                    <div className="relative flex items-center gap-1.5">
-                        <button
-                            onClick={() => {
-                                const nextVal = !voiceEnabled;
-                                setVoiceEnabled(nextVal);
-                                if (nextVal) {
-                                    audioGuidance.speakRaw("Copiloto de voz activado.");
-                                } else {
-                                    audioGuidance.stop();
-                                }
-                            }}
-                            style={{
-                                padding: '0.4rem 0.75rem',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.35rem',
-                                borderRadius: '6px',
-                                fontSize: '0.75rem',
-                                fontWeight: '600',
-                                cursor: 'pointer',
-                                border: '1px solid rgba(255, 255, 255, 0.15)',
-                                background: voiceEnabled ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
-                                color: voiceEnabled ? '#a7f3d0' : '#fca5a5'
-                            }}
-                            title={voiceEnabled ? "Silenciar asistente de voz" : "Activar asistente de voz"}
-                        >
-                            <i className={`fa-solid ${voiceEnabled ? 'fa-volume-high' : 'fa-volume-xmark'}`}></i>
-                            {voiceEnabled ? 'Voz On' : 'Voz Off'}
-                        </button>
-
-                        <button
-                            onClick={() => {
-                                const voices = audioGuidance.getVoices();
-                                if (voices.length > 1) {
-                                    // Cycle through available Spanish voices
-                                    const currentUri = audioGuidance.selectedVoiceURI;
-                                    const currIdx = voices.findIndex(v => v.uri === currentUri);
-                                    const nextIdx = (currIdx + 1) % voices.length;
-                                    const nextVoice = voices[nextIdx];
-                                    audioGuidance.setVoice(nextVoice.uri);
-                                    audioGuidance.speakRaw(`Voz cambiada a ${nextVoice.name}.`);
-                                } else {
-                                    audioGuidance.speakRaw("Voz por defecto en español seleccionada.");
-                                }
-                            }}
-                            style={{
-                                padding: '0.4rem 0.6rem',
-                                borderRadius: '6px',
-                                border: '1px solid rgba(255, 255, 255, 0.15)',
-                                background: 'rgba(15, 23, 42, 0.5)',
-                                color: '#e2e8f0',
-                                fontSize: '0.75rem',
-                                cursor: 'pointer'
-                            }}
-                            title="Cambiar tipo de voz (Femenina / Masculina / Natural)"
-                        >
-                            <i className="fa-solid fa-microphone-lines"></i> Cambiar Voz
-                        </button>
-                    </div>
-                </div>
-            ) : (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.72rem', color: '#06b6d4', background: 'rgba(6, 182, 212, 0.12)', border: '1px solid rgba(6, 182, 212, 0.25)', padding: '0.35rem 1rem', borderRadius: '20px', margin: '0.25rem 0', fontWeight: '600' }}>
-                    <i className="fa-solid fa-satellite fa-bounce"></i>
-                    Rastreo GPS en tiempo real activo. Sigue la ruta en tu recorrido físico.
-                </div>
-            )}
-
-            <div className="hud-handlebar-cockpit">
-                <div className="handlebar-left"></div>
-                <div className="handlebar-center">
-                    <div className="bike-computer">
-                        <div className="computer-screen">
-                            <span className="battery-icon"><i className="fa-solid fa-battery-three-quarters"></i> 87%</span>
-                            <span className="time-display">{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                        </div>
-                    </div>
-                </div>
-                <div className="handlebar-right"></div>
+                )}
             </div>
 
-            <button 
-                className="hud-exit-btn"
-                onClick={() => {
-                    setNavStatus('stopped');
-                    setIsNavigating(false);
-                    setCyclistCoords(null);
-                    setCyclistIndex(0);
-                    setSpeedKmh(0);
-                    setNextTrafficLight(null);
-                    audioGuidance.stop();
-                }}
-                title="Salir de la navegación"
-            >
-                <i className="fa-solid fa-xmark"></i> Salir
-            </button>
+            {/* 3. Waze-style Bottom Card (Arrival Time, Remaining Km, Audio & Exit) */}
+            <div className="pointer-events-auto max-w-md w-full mx-auto bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-3xl shadow-2xl p-4 border border-slate-200 dark:border-slate-800 flex items-center justify-between animate-slide-up text-slate-900 dark:text-white">
+                <div className="flex flex-col">
+                    <span className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+                        {getEstimatedArrivalTime(activeRoute.durationMin)}
+                    </span>
+                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mt-0.5">
+                        <span>{activeRoute.durationMin} min</span>
+                        <span>•</span>
+                        <span>{activeRoute.distanceKm} km</span>
+                    </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                    {/* Voice Mute/Unmute toggle button */}
+                    <button
+                        onClick={() => {
+                            const nextVal = !voiceEnabled;
+                            setVoiceEnabled(nextVal);
+                            if (nextVal) {
+                                audioGuidance.speakRaw("Voz activada.");
+                            } else {
+                                audioGuidance.stop();
+                            }
+                        }}
+                        className={`w-10 h-10 rounded-full flex items-center justify-center cursor-pointer border-none transition-all ${
+                            voiceEnabled 
+                                ? 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200' 
+                                : 'bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400'
+                        }`}
+                        title={voiceEnabled ? "Silenciar voz" : "Activar voz"}
+                    >
+                        <i className={`fa-solid ${voiceEnabled ? 'fa-volume-high text-sm' : 'fa-volume-xmark text-sm'}`}></i>
+                    </button>
+
+                    {/* Change Voice button */}
+                    <button
+                        onClick={() => {
+                            const voices = audioGuidance.getVoices();
+                            if (voices.length > 1) {
+                                const currentUri = audioGuidance.selectedVoiceURI;
+                                const currIdx = voices.findIndex(v => v.uri === currentUri);
+                                const nextIdx = (currIdx + 1) % voices.length;
+                                const nextVoice = voices[nextIdx];
+                                audioGuidance.setVoice(nextVoice.uri);
+                                audioGuidance.speakRaw(`Voz ${nextVoice.name}.`);
+                            } else {
+                                audioGuidance.speakRaw("Voz en español seleccionada.");
+                            }
+                        }}
+                        className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 flex items-center justify-center cursor-pointer border-none"
+                        title="Cambiar tipo de voz"
+                    >
+                        <i className="fa-solid fa-microphone-lines text-xs"></i>
+                    </button>
+
+                    {/* Circular Blue Exit/Finish Button (like Waze cyan chevron/down circle) */}
+                    <button
+                        onClick={() => {
+                            setNavStatus('stopped');
+                            setIsNavigating(false);
+                            setCyclistCoords(null);
+                            setCyclistIndex(0);
+                            setSpeedKmh(0);
+                            setNextTrafficLight(null);
+                            audioGuidance.stop();
+                        }}
+                        className="w-10 h-10 rounded-full bg-cyan-500 hover:bg-cyan-600 text-white flex items-center justify-center shadow-md cursor-pointer border-none transition-all ml-1"
+                        title="Finalizar viaje"
+                    >
+                        <i className="fa-solid fa-chevron-down text-sm"></i>
+                    </button>
+                </div>
+            </div>
         </div>
     );
 
