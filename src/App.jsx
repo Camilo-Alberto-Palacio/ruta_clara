@@ -14,6 +14,7 @@ import { constructionZones } from './data/constructionZones';
 import { trafficJams } from './data/trafficJams';
 import { trafficLights as initialTrafficLights } from './data/trafficLights';
 import { fetchBogotaTrafficLights } from './utils/trafficLightsService';
+import { audioGuidance } from './utils/audioGuidanceService';
 import { 
     calculateRisk, 
     getRecommendations, 
@@ -30,6 +31,7 @@ export default function App() {
     // 1. Localities and View Modes
     const [localidad, setLocalidad] = useState('usme');
     const [viewMode, setViewMode] = useState('citizen');
+    const [voiceEnabled, setVoiceEnabled] = useState(true);
 
     // 2. Segment Data State (allows adding custom_audit dynamically)
     const [segments, setSegments] = useState(initialSegments);
@@ -237,6 +239,11 @@ export default function App() {
         }));
     };
 
+    // Sync audio guidance state with voiceEnabled
+    useEffect(() => {
+        audioGuidance.setEnabled(voiceEnabled);
+    }, [voiceEnabled]);
+
     // D. Smooth Continuous Navigation Simulation loop
     useEffect(() => {
         const activeRoute = generatedRoutes.find(r => r.id === activeRouteId);
@@ -280,6 +287,7 @@ export default function App() {
                 setCyclistIndex(0);
                 setSpeedKmh(0);
                 setNextTrafficLight(null);
+                audioGuidance.speak("¡Felicidades! Has llegado a tu destino de forma segura.", true);
                 alert("¡Has llegado a tu destino de forma segura!");
                 return;
             }
@@ -300,6 +308,7 @@ export default function App() {
                 if (nearbyLight.state === 'rojo') {
                     setSpeedKmh(0);
                     setHudRecommendation('🚦 Semáforo en ROJO. Esperando cambio a verde...');
+                    audioGuidance.speak('Atención: Semáforo en rojo. Prepárate para detenerte.');
                     waitTicks++;
                     if (waitTicks < 6) {
                         return; // pause cyclist progression temporarily
@@ -320,11 +329,12 @@ export default function App() {
             const variance = Math.sin(nextIdx * 0.2) * 2.5;
             setSpeedKmh(Math.round(baseSpeed + variance));
 
-            // Dynamic recommendations periodically
+            // Dynamic recommendations & Voice Copilot periodically (every 5 steps = ~30m)
             if (nextIdx % 5 === 0) {
+                const currentCoord = denseCoords[nextIdx];
                 const riskInfo = evaluateCoordinateRisk(
-                    denseCoords[nextIdx][0], 
-                    denseCoords[nextIdx][1], 
+                    currentCoord[0], 
+                    currentCoord[1], 
                     segments, 
                     simulationState, 
                     constructionZones, 
@@ -333,16 +343,31 @@ export default function App() {
                 );
 
                 const hasConst = constructionZones.some(zone => {
-                    const distDeg = Math.sqrt(Math.pow(denseCoords[nextIdx][0] - zone.lat, 2) + Math.pow(denseCoords[nextIdx][1] - zone.lng, 2));
+                    const distDeg = Math.sqrt(Math.pow(currentCoord[0] - zone.lat, 2) + Math.pow(currentCoord[1] - zone.lng, 2));
                     return (distDeg * 111000) <= zone.radius;
+                });
+
+                // Detect nearby citizen reports within 45 meters
+                const nearbyReport = citizenReports.find(report => {
+                    const rCoords = report.properties?.coordenadas;
+                    if (!rCoords) return false;
+                    const distDeg = Math.sqrt(Math.pow(currentCoord[0] - rCoords[0], 2) + Math.pow(currentCoord[1] - rCoords[1], 2));
+                    return (distDeg * 111000) <= 45;
                 });
 
                 if (hasConst) {
                     setHudRecommendation('🚧 Obras viales del IDU adelante. Precaución.');
+                    audioGuidance.speak('Precaución: Obras viales del IDU en la vía. Disminuye la velocidad.');
+                } else if (nearbyReport) {
+                    const tipo = nearbyReport.properties.tipo_novedad;
+                    setHudRecommendation(`📢 Reporte ciudadano: ${tipo}`);
+                    audioGuidance.speak(`Atención: Reporte de ciclistas de ${tipo} en la ciclorruta.`);
                 } else if (riskInfo.level === 'Alto') {
                     setHudRecommendation('⚠️ Sector con alerta de seguridad. Mantente en movimiento.');
+                    audioGuidance.speak('Alerta de seguridad: Sector con alto índice de incidentes. Mantén un pedaleo constante y no te detengas.');
                 } else if (simulationState.weather === 'lluvia') {
                     setHudRecommendation('🌧️ Calzada mojada por lluvias. Conduce con cuidado.');
+                    audioGuidance.speak('Precaución: Calzada mojada por lluvias. Evita frenadas bruscas.');
                 } else if (nearbyLight && nearbyLight.state === 'verde') {
                     setHudRecommendation('🟢 Cruce con semáforo en VERDE. Paso libre.');
                 } else {
@@ -353,7 +378,7 @@ export default function App() {
         }, 120 / navSpeedMultiplier);
 
         return () => clearInterval(interval);
-    }, [navStatus, cyclistIndex, activeRouteId, navSpeedMultiplier, trafficLights, segments, simulationState, constructionZones, citizenReports, navigationMode]);
+    }, [navStatus, cyclistIndex, activeRouteId, navSpeedMultiplier, trafficLights, segments, simulationState, constructionZones, citizenReports, navigationMode, voiceEnabled]);
 
     // D2. Real-time GPS Navigation watcher
     useEffect(() => {
@@ -870,6 +895,7 @@ export default function App() {
         setNavStatus('running');
         setCyclistIndex(0);
         setCyclistCoords(activeRoute.coordinates[0]);
+        audioGuidance.speak("Iniciando recorrido hacia tu destino. Te acompañaré durante el viaje con alertas de seguridad en tiempo real.", true);
     };
 
     // 15. Calculate active predictions and CPTED recommendations
@@ -1155,6 +1181,35 @@ export default function App() {
                             </button>
                         ))}
                     </div>
+                    {/* Voice Guidance Toggle */}
+                    <button
+                        onClick={() => {
+                            const nextVal = !voiceEnabled;
+                            setVoiceEnabled(nextVal);
+                            if (nextVal) {
+                                audioGuidance.speak("Copiloto de voz activado.");
+                            } else {
+                                audioGuidance.stop();
+                            }
+                        }}
+                        style={{
+                            padding: '0.4rem 0.85rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.4rem',
+                            borderRadius: '6px',
+                            fontSize: '0.75rem',
+                            fontWeight: '600',
+                            cursor: 'pointer',
+                            border: '1px solid rgba(255, 255, 255, 0.15)',
+                            background: voiceEnabled ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                            color: voiceEnabled ? '#a7f3d0' : '#fca5a5'
+                        }}
+                        title={voiceEnabled ? "Silenciar asistente de voz" : "Activar asistente de voz"}
+                    >
+                        <i className={`fa-solid ${voiceEnabled ? 'fa-volume-high' : 'fa-volume-xmark'}`}></i>
+                        {voiceEnabled ? 'Voz On' : 'Voz Off'}
+                    </button>
                 </div>
             ) : (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.72rem', color: '#06b6d4', background: 'rgba(6, 182, 212, 0.12)', border: '1px solid rgba(6, 182, 212, 0.25)', padding: '0.35rem 1rem', borderRadius: '20px', margin: '0.25rem 0', fontWeight: '600' }}>
@@ -1185,6 +1240,7 @@ export default function App() {
                     setCyclistIndex(0);
                     setSpeedKmh(0);
                     setNextTrafficLight(null);
+                    audioGuidance.stop();
                 }}
                 title="Salir de la navegación"
             >
