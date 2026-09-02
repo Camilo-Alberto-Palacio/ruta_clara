@@ -48,17 +48,19 @@ export default function App() {
         accidents: false
     });
 
-    // Map Layers Visibility State
+    // Map Layers Visibility State (Clean minimalist defaults)
     const [mapLayers, setMapLayers] = useState({
         localities: true,
-        cais: true,
+        cais: false,
         construction: true,
-        accidents: true,
-        robberies: true,
-        trafficJams: true,
+        accidents: false,
+        robberies: false,
+        trafficJams: false,
         citizenReports: true,
         trafficLights: true
     });
+
+    const [desktopLayersOpen, setDesktopLayersOpen] = useState(false);
 
     // Sidebar active tab (desktop left panel content)
     const [activeTab, setActiveTab] = useState('routes');
@@ -1666,6 +1668,62 @@ export default function App() {
                     >
                         <i className={`fa-solid ${leftDrawerOpen ? 'fa-chevron-left' : 'fa-sliders'}`}></i>
                     </button>
+                </div>
+            )}
+
+            {/* 7. Desktop Floating Map Controls (Top Right) */}
+            {!isMobile && !isNavigating && (
+                <div className="hidden md:flex absolute top-6 right-6 z-20 flex-col gap-2.5">
+                    <div className="relative">
+                        <button 
+                            onClick={() => setDesktopLayersOpen(!desktopLayersOpen)}
+                            className={`w-10 h-10 rounded-xl bg-white/90 backdrop-blur-md border border-slate-200 text-slate-700 shadow-md flex items-center justify-center cursor-pointer hover:bg-slate-50 transition-all ${desktopLayersOpen ? 'ring-2 ring-emerald-600' : ''}`}
+                            title="Capas del Mapa"
+                        >
+                            <i className="fa-solid fa-layer-group text-sm text-emerald-600"></i>
+                        </button>
+                        {desktopLayersOpen && (
+                            <div className="absolute right-12 top-0 bg-white/95 backdrop-blur-md border border-slate-200 p-3.5 rounded-2xl shadow-xl z-30 w-64 text-slate-800 animate-fade-in flex flex-col gap-2">
+                                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5 border-b border-slate-100 pb-1.5">
+                                    <i className="fa-solid fa-layer-group text-emerald-600"></i> Capas del Mapa
+                                </h4>
+                                <div className="flex flex-col gap-1 text-xs">
+                                    <label className="flex justify-between items-center py-0.5">
+                                        <span className="text-slate-700">Límites Localidades</span>
+                                        <input type="checkbox" checked={mapLayers.localities} onChange={e => setMapLayers(p=>({...p, localities: e.target.checked}))} className="accent-emerald-600 w-3.5 h-3.5"/>
+                                    </label>
+                                    <label className="flex justify-between items-center py-0.5">
+                                        <span className="text-slate-700">CAIs Policía</span>
+                                        <input type="checkbox" checked={mapLayers.cais} onChange={e => setMapLayers(p=>({...p, cais: e.target.checked}))} className="accent-emerald-600 w-3.5 h-3.5"/>
+                                    </label>
+                                    <label className="flex justify-between items-center py-0.5">
+                                        <span className="text-slate-700">Obras IDU</span>
+                                        <input type="checkbox" checked={mapLayers.construction} onChange={e => setMapLayers(p=>({...p, construction: e.target.checked}))} className="accent-emerald-600 w-3.5 h-3.5"/>
+                                    </label>
+                                    <label className="flex justify-between items-center py-0.5">
+                                        <span className="text-slate-700">Accidentes</span>
+                                        <input type="checkbox" checked={mapLayers.accidents} onChange={e => setMapLayers(p=>({...p, accidents: e.target.checked}))} className="accent-emerald-600 w-3.5 h-3.5"/>
+                                    </label>
+                                    <label className="flex justify-between items-center py-0.5">
+                                        <span className="text-slate-700">Robos 24h</span>
+                                        <input type="checkbox" checked={mapLayers.robberies} onChange={e => setMapLayers(p=>({...p, robberies: e.target.checked}))} className="accent-emerald-600 w-3.5 h-3.5"/>
+                                    </label>
+                                    <label className="flex justify-between items-center py-0.5">
+                                        <span className="text-slate-700">Trancones</span>
+                                        <input type="checkbox" checked={mapLayers.trafficJams} onChange={e => setMapLayers(p=>({...p, trafficJams: e.target.checked}))} className="accent-emerald-600 w-3.5 h-3.5"/>
+                                    </label>
+                                    <label className="flex justify-between items-center py-0.5">
+                                        <span className="text-slate-700">Semáforos</span>
+                                        <input type="checkbox" checked={mapLayers.trafficLights} onChange={e => setMapLayers(p=>({...p, trafficLights: e.target.checked}))} className="accent-emerald-600 w-3.5 h-3.5"/>
+                                    </label>
+                                    <label className="flex justify-between items-center py-0.5">
+                                        <span className="text-slate-700">Reportes Ciudadanos</span>
+                                        <input type="checkbox" checked={mapLayers.citizenReports} onChange={e => setMapLayers(p=>({...p, citizenReports: e.target.checked}))} className="accent-emerald-600 w-3.5 h-3.5"/>
+                                    </label>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
             )}
 

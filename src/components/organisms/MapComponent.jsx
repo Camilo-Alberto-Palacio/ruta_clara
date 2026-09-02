@@ -21,16 +21,24 @@ function isPointInPolygon(point, polygonCoords) {
 }
 
 // Helper: check if a [lat, lng] point is within thresholdMeters of any segment in routeCoords
-function isNearRoute(lat, lng, routeCoords, thresholdMeters = 300) {
-    if (!routeCoords || routeCoords.length === 0) return true;
-    // Use approximate degree-to-meter factor
+function isNearRoute(lat, lng, routeCoords, thresholdMeters = 200) {
+    if (!routeCoords || routeCoords.length === 0) return false;
     const thresholdDeg = thresholdMeters / 111000;
+    const thresholdSq = thresholdDeg * thresholdDeg;
     for (const pt of routeCoords) {
         const dLat = pt[0] - lat;
         const dLng = pt[1] - lng;
-        if (Math.sqrt(dLat * dLat + dLng * dLng) <= thresholdDeg) return true;
+        if ((dLat * dLat + dLng * dLng) <= thresholdSq) return true;
     }
     return false;
+}
+
+// Helper: determine if a marker should be rendered based on active route OR map zoom level
+function shouldShowMarker(lat, lng, routeCoords, currentZoom, minZoomWithoutRoute = 14, thresholdMeters = 200) {
+    if (routeCoords && routeCoords.length > 0) {
+        return isNearRoute(lat, lng, routeCoords, thresholdMeters);
+    }
+    return currentZoom >= minZoomWithoutRoute;
 }
 
 // Get HEX color for a risk level
@@ -144,6 +152,9 @@ export default function MapComponent({
     const activeRouteCoordsRef = useRef(activeRouteCoords);
     activeRouteCoordsRef.current = activeRouteCoords;
 
+    // Track map zoom level to control marker density
+    const [currentZoom, setCurrentZoom] = useState(13);
+
     // 1. Initial Mount: Initialize Leaflet Map and Fetch GeoJSON Boundaries
     useEffect(() => {
         if (!mapContainerRef.current) return;
@@ -160,6 +171,11 @@ export default function MapComponent({
         L.control.zoom({ position: 'bottomright' }).addTo(map);
 
         mapRef.current = map;
+
+        // Update zoom state on zoom changes
+        map.on('zoomend', () => {
+            setCurrentZoom(map.getZoom());
+        });
 
         // Initial Tile Layer based on mapStyle
         let initialUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
@@ -509,42 +525,41 @@ export default function MapComponent({
         if (!showConstruction || !mapLayers.construction) return;
 
         constructionZones.forEach(zone => {
-            // Route focus: when a route is active, only show construction zones near the route
-            if (activeRouteCoordsRef.current && !isNearRoute(zone.lat, zone.lng, activeRouteCoordsRef.current, 400)) return;
+            if (!shouldShowMarker(zone.lat, zone.lng, activeRouteCoordsRef.current, currentZoom, 13, 200)) return;
+            
             // 1. Circle representing the impact radius
             const circle = L.circle([zone.lat, zone.lng], {
                 radius: zone.radius,
-                color: '#f97316', // Orange
+                color: '#f97316',
                 fillColor: '#f97316',
-                fillOpacity: 0.18,
+                fillOpacity: 0.15,
                 weight: 1.5,
-                dashArray: '5, 5',
+                dashArray: '4, 4',
                 interactive: true
             });
 
-            // 2. Custom marker at the center with a construction icon
+            // 2. Minimalist micro-marker
             const marker = L.marker([zone.lat, zone.lng], {
                 icon: L.divIcon({
                     className: 'construction-marker',
                     html: `
                         <div style="
-                            width: 28px;
-                            height: 28px;
-                            background: #f97316;
-                            border: 2px solid #fff;
+                            width: 20px;
+                            height: 20px;
+                            background: #ea580c;
+                            border: 1.5px solid #fff;
                             border-radius: 50%;
                             display: flex;
                             align-items: center;
                             justify-content: center;
                             color: #fff;
-                            box-shadow: 0 2px 6px rgba(0,0,0,0.4);
-                            animation: pulseGlow 2s infinite alternate;
+                            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
                         ">
-                            <i class="fa-solid fa-person-digging" style="font-size: 13px;"></i>
+                            <i class="fa-solid fa-person-digging" style="font-size: 9px;"></i>
                         </div>
                     `,
-                    iconSize: [28, 28],
-                    iconAnchor: [14, 14]
+                    iconSize: [20, 20],
+                    iconAnchor: [10, 10]
                 })
             });
 
@@ -566,19 +581,15 @@ export default function MapComponent({
             
             circle.bindPopup(popupContent, { className: 'custom-leaflet-popup' });
             marker.bindPopup(popupContent, { className: 'custom-leaflet-popup' });
-
-            // Tooltip on hover
             circle.bindTooltip(`<strong>Obra:</strong> ${zone.name}`, { sticky: true, className: 'custom-tooltip' });
 
-            // Add to map
             circle.addTo(map);
             marker.addTo(map);
 
-            // Save references
             constructionLayersRef.current.push(circle);
             constructionLayersRef.current.push(marker);
         });
-    }, [constructionZones, showConstruction, mapLayers.construction, activeRoute]);
+    }, [constructionZones, showConstruction, mapLayers.construction, activeRoute, currentZoom]);
 
     // 5c. Update active CAIs overlays on the map
     useEffect(() => {
@@ -594,30 +605,30 @@ export default function MapComponent({
         if (!mapLayers.cais) return;
 
         caiPoints.forEach(cai => {
-            // Route focus: when a route is active, only show CAIs near the route
-            if (activeRouteCoordsRef.current && !isNearRoute(cai.lat, cai.lng, activeRouteCoordsRef.current, 350)) return;
+            if (!shouldShowMarker(cai.lat, cai.lng, activeRouteCoordsRef.current, currentZoom, 13, 300)) return;
+
             const marker = L.marker([cai.lat, cai.lng], {
                 icon: L.divIcon({
                     className: 'cai-marker-wrapper',
                     html: `
                         <div class="cai-marker" style="
-                            width: 28px;
-                            height: 28px;
+                            width: 20px;
+                            height: 20px;
                             background: #1e3a8a;
-                            border: 2px solid #38bdf8;
+                            border: 1.5px solid #60a5fa;
                             border-radius: 50%;
                             display: flex;
                             align-items: center;
                             justify-content: center;
                             color: #fff;
-                            box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+                            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
                             cursor: pointer;
                         ">
-                            <i class="fa-solid fa-shield-halved" style="font-size: 13px;"></i>
+                            <i class="fa-solid fa-shield-halved" style="font-size: 9px;"></i>
                         </div>
                     `,
-                    iconSize: [28, 28],
-                    iconAnchor: [14, 14]
+                    iconSize: [20, 20],
+                    iconAnchor: [10, 10]
                 })
             });
 
@@ -630,7 +641,7 @@ export default function MapComponent({
                     <p style="margin: 0 0 0.4rem 0; font-size: 0.7rem; color: #94a3b8;"><b>Localidad:</b> ${cai.localidad.toUpperCase()}</p>
                     <p style="margin: 0 0 0.4rem 0; font-size: 0.72rem; color: #cbd5e1; line-height: 1.35;"><b>Dirección:</b> ${cai.address}</p>
                     <div style="border-top: 1px solid rgba(255,255,255,0.08); padding-top: 0.4rem; margin-top: 0.4rem; font-size: 0.65rem; color: #10b981; font-weight: 700; display: flex; align-items: center; gap: 0.25rem;">
-                        <span style="display:inline-block; width: 6px; height: 6px; border-radius: 50%; background: #10b981; animation: pulseGlow 1.5s infinite alternate;"></span>
+                        <span style="display:inline-block; width: 6px; height: 6px; border-radius: 50%; background: #10b981;"></span>
                         <span>Activo • Vigilancia 24h</span>
                     </div>
                 </div>
@@ -642,7 +653,7 @@ export default function MapComponent({
             marker.addTo(map);
             caiLayersRef.current.push(marker);
         });
-    }, [mapLayers.cais, activeRoute]);
+    }, [mapLayers.cais, activeRoute, currentZoom]);
 
     // 5d. Update active Robbery Reports overlays on the map
     useEffect(() => {
@@ -658,30 +669,30 @@ export default function MapComponent({
         if (!mapLayers.robberies) return;
 
         robberyReports.forEach(report => {
-            // Route focus: when a route is active, only show robberies near the route
-            if (activeRouteCoordsRef.current && !isNearRoute(report.lat, report.lng, activeRouteCoordsRef.current, 300)) return;
+            if (!shouldShowMarker(report.lat, report.lng, activeRouteCoordsRef.current, currentZoom, 14, 150)) return;
+
             const marker = L.marker([report.lat, report.lng], {
                 icon: L.divIcon({
                     className: 'robbery-marker-wrapper',
                     html: `
                         <div class="robbery-marker" style="
-                            width: 28px;
-                            height: 28px;
-                            background: #ef4444;
-                            border: 2px solid #fca5a5;
+                            width: 18px;
+                            height: 18px;
+                            background: #dc2626;
+                            border: 1.5px solid #fca5a5;
                             border-radius: 50%;
                             display: flex;
                             align-items: center;
                             justify-content: center;
                             color: #fff;
-                            box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+                            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
                             cursor: pointer;
                         ">
-                            <i class="fa-solid fa-mask" style="font-size: 13px;"></i>
+                            <i class="fa-solid fa-mask" style="font-size: 8px;"></i>
                         </div>
                     `,
-                    iconSize: [28, 28],
-                    iconAnchor: [14, 14]
+                    iconSize: [18, 18],
+                    iconAnchor: [9, 9]
                 })
             });
 
@@ -705,7 +716,7 @@ export default function MapComponent({
             marker.addTo(map);
             robberyLayersRef.current.push(marker);
         });
-    }, [mapLayers.robberies, activeRoute]);
+    }, [mapLayers.robberies, activeRoute, currentZoom]);
 
     // 5e. Update active Accident overlays on the map
     useEffect(() => {
@@ -721,30 +732,30 @@ export default function MapComponent({
         if (!mapLayers.accidents) return;
 
         accidentPoints.forEach(acc => {
-            // Route focus: when a route is active, only show accidents near the route
-            if (activeRouteCoordsRef.current && !isNearRoute(acc.lat, acc.lng, activeRouteCoordsRef.current, 300)) return;
+            if (!shouldShowMarker(acc.lat, acc.lng, activeRouteCoordsRef.current, currentZoom, 14, 150)) return;
+
             const marker = L.marker([acc.lat, acc.lng], {
                 icon: L.divIcon({
                     className: 'accident-marker-wrapper',
                     html: `
                         <div class="accident-marker" style="
-                            width: 28px;
-                            height: 28px;
-                            background: #eab308;
-                            border: 2px solid #fde047;
+                            width: 18px;
+                            height: 18px;
+                            background: #d97706;
+                            border: 1.5px solid #fef3c7;
                             border-radius: 50%;
                             display: flex;
                             align-items: center;
                             justify-content: center;
-                            color: #000;
-                            box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+                            color: #fff;
+                            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
                             cursor: pointer;
                         ">
-                            <i class="fa-solid fa-car-burst" style="font-size: 13px;"></i>
+                            <i class="fa-solid fa-car-burst" style="font-size: 8px;"></i>
                         </div>
                     `,
-                    iconSize: [28, 28],
-                    iconAnchor: [14, 14]
+                    iconSize: [18, 18],
+                    iconAnchor: [9, 9]
                 })
             });
 
@@ -768,7 +779,7 @@ export default function MapComponent({
             marker.addTo(map);
             accidentLayersRef.current.push(marker);
         });
-    }, [mapLayers.accidents, activeRoute]);
+    }, [mapLayers.accidents, activeRoute, currentZoom]);
 
     // 6. Draw route polylines dynamically segmented by CPTED risk
     useEffect(() => {
@@ -897,22 +908,21 @@ export default function MapComponent({
         if (!mapLayers.trafficJams) return;
 
         trafficJams.forEach(jam => {
-            const jamColor = jam.severity === 'severo' ? '#dc2626' : (jam.severity === 'leve' ? '#eab308' : '#f97316');
-            const jamBorder = jam.severity === 'severo' ? '#fca5a5' : (jam.severity === 'leve' ? '#fde047' : '#fdba74');
-
-            // Route focus: when a route is active, only show traffic jams near the route
             const midIdx = Math.floor(jam.coordinates.length / 2);
             const midPt = jam.coordinates[midIdx];
-            if (activeRouteCoordsRef.current && !isNearRoute(midPt[0], midPt[1], activeRouteCoordsRef.current, 500)) return;
+            
+            if (!shouldShowMarker(midPt[0], midPt[1], activeRouteCoordsRef.current, currentZoom, 13, 300)) return;
+
+            const jamColor = jam.severity === 'severo' ? '#dc2626' : (jam.severity === 'leve' ? '#eab308' : '#f97316');
+            const jamBorder = jam.severity === 'severo' ? '#fca5a5' : (jam.severity === 'leve' ? '#fde047' : '#fdba74');
 
             // Polyline for the jam corridor
             const polyline = L.polyline(jam.coordinates, {
                 color: jamColor,
-                weight: 5,
-                opacity: 0.6,
-                dashArray: '8, 6',
-                lineJoin: 'round',
-                className: 'traffic-jam-line-animated'
+                weight: 4,
+                opacity: 0.65,
+                dashArray: '6, 6',
+                lineJoin: 'round'
             });
 
             // Marker at the midpoint
@@ -921,29 +931,29 @@ export default function MapComponent({
                     className: 'traffic-jam-marker-wrapper',
                     html: `
                         <div style="
-                            width: 28px;
-                            height: 28px;
+                            width: 18px;
+                            height: 18px;
                             background: ${jamColor};
-                            border: 2px solid ${jamBorder};
+                            border: 1.5px solid ${jamBorder};
                             border-radius: 50%;
                             display: flex;
                             align-items: center;
                             justify-content: center;
                             color: #fff;
-                            box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+                            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
                             cursor: pointer;
                         ">
-                            <i class="fa-solid fa-car" style="font-size: 12px;"></i>
+                            <i class="fa-solid fa-car" style="font-size: 8px;"></i>
                         </div>
                     `,
-                    iconSize: [28, 28],
-                    iconAnchor: [14, 14]
+                    iconSize: [18, 18],
+                    iconAnchor: [9, 9]
                 })
             });
 
             const severityLabel = jam.severity.charAt(0).toUpperCase() + jam.severity.slice(1);
             const popupContent = `
-                <div style="color: #f8fafc; font-family: var(--font-body); font-size: 0.78rem; padding: 0.25rem; min-width: 220px;">
+                <div style="color: #f8fafc; font-family: var(--font-body); font-size: 0.78rem; padding: 0.25rem; min-width: 200px;">
                     <h4 style="font-family: var(--font-heading); font-size: 0.85rem; font-weight: 700; margin-bottom: 0.35rem; color: ${jamColor}; display: flex; align-items: center; gap: 0.35rem;">
                         <i class="fa-solid fa-car"></i> ${jam.name}
                     </h4>
@@ -968,7 +978,7 @@ export default function MapComponent({
             trafficJamLayersRef.current.push(polyline);
             trafficJamLayersRef.current.push(marker);
         });
-    }, [trafficJams, mapLayers.trafficJams, activeRoute]);
+    }, [trafficJams, mapLayers.trafficJams, activeRoute, currentZoom]);
 
     // 6c. Draw citizen science reports on the map
     useEffect(() => {
@@ -988,8 +998,7 @@ export default function MapComponent({
             const coords = report.properties.coordenadas; // [lat, lng]
             if (!coords) return;
 
-            // Route focus: when a route is active, only show citizen reports near the route
-            if (activeRouteCoordsRef.current && !isNearRoute(coords[0], coords[1], activeRouteCoordsRef.current, 300)) return;
+            if (!shouldShowMarker(coords[0], coords[1], activeRouteCoordsRef.current, currentZoom, 14, 150)) return;
 
             const tipo = report.properties.tipo_novedad;
             const votos = report.properties.numero_votos;
@@ -1001,13 +1010,13 @@ export default function MapComponent({
             let icon = 'fa-triangle-exclamation';
 
             if (tipo.includes('Luminaria') || tipo.includes('lobo')) {
-                color = '#f59e0b'; // Amber
+                color = '#f59e0b';
                 icon = 'fa-lightbulb';
             } else if (tipo.includes('Hueco') || tipo.includes('destructiva')) {
-                color = '#f59e0b'; // Amber
+                color = '#f59e0b';
                 icon = 'fa-triangle-exclamation';
             } else if (tipo.includes('Inseguridad') || tipo.includes('Atraco')) {
-                color = '#991b1b'; // Carmine Red
+                color = '#dc2626';
                 icon = 'fa-hand';
             }
 
@@ -1016,27 +1025,27 @@ export default function MapComponent({
                     className: 'citizen-report-marker-wrapper',
                     html: `
                         <div class="citizen-report-marker" style="
-                            width: 24px;
-                            height: 24px;
+                            width: 18px;
+                            height: 18px;
                             background: ${color};
-                            border: 1.5px solid rgba(255,255,255,0.8);
+                            border: 1.5px solid rgba(255,255,255,0.9);
                             border-radius: 50%;
                             display: flex;
                             align-items: center;
                             justify-content: center;
                             color: #fff;
-                            box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+                            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
                             cursor: pointer;
                         ">
-                            <i class="fa-solid ${icon}" style="font-size: 10px;"></i>
+                            <i class="fa-solid ${icon}" style="font-size: 8px;"></i>
                         </div>
                     `,
-                    iconSize: [24, 24],
-                    iconAnchor: [12, 12]
+                    iconSize: [18, 18],
+                    iconAnchor: [9, 9]
                 })
             });
 
-            // Create flat popup element without massive rounding (max 8px, custom-leaflet-popup-citizen)
+            // Create flat popup element
             const div = document.createElement('div');
             div.style.minWidth = '180px';
             div.innerHTML = `
@@ -1053,7 +1062,6 @@ export default function MapComponent({
                 </div>
             `;
 
-            // Attach upvote action
             const btn = div.querySelector('.respaldar-btn');
             btn.addEventListener('click', () => {
                 const countSpan = div.querySelector('.vote-count');
@@ -1071,7 +1079,7 @@ export default function MapComponent({
             marker.addTo(map);
             citizenReportLayersRef.current.push(marker);
         });
-    }, [citizenReports, mapLayers.citizenReports, activeRoute]);
+    }, [citizenReports, mapLayers.citizenReports, activeRoute, currentZoom]);
 
     // 7. Update segment polyline colors and interaction (For audit mode)
     useEffect(() => {
@@ -1124,7 +1132,7 @@ export default function MapComponent({
         };
     }, []);
 
-    // 6d. Draw traffic lights on the map
+    // 6d. Draw traffic lights on the map with micro-dot design
     useEffect(() => {
         const map = mapRef.current;
         if (!map) return;
@@ -1138,33 +1146,37 @@ export default function MapComponent({
         if (mapLayers.trafficLights === false) return;
 
         trafficLights.forEach(light => {
-            // Route focus: when a route is active, show only traffic lights near the route (200m buffer)
-            if (activeRouteCoordsRef.current && !isNearRoute(light.coordinates[0], light.coordinates[1], activeRouteCoordsRef.current, 250)) return;
+            if (!shouldShowMarker(light.coordinates[0], light.coordinates[1], activeRouteCoordsRef.current, currentZoom, 15, 120)) return;
+
+            const lightColor = light.state === 'verde' ? '#10b981' : (light.state === 'amarillo' ? '#eab308' : '#ef4444');
+
             const marker = L.marker([light.coordinates[0], light.coordinates[1]], {
                 icon: L.divIcon({
                     className: 'traffic-light-marker-wrapper',
                     html: `
                         <div style="
-                            width: 24px;
-                            height: 24px;
-                            background: #1e293b;
-                            border: 1.5px solid #64748b;
-                            border-radius: 6px;
+                            width: 16px;
+                            height: 16px;
+                            background: #0f172a;
+                            border: 1.5px solid #475569;
+                            border-radius: 50%;
                             display: flex;
                             align-items: center;
                             justify-content: center;
-                            gap: 2px;
-                            padding: 2px;
-                            box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+                            box-shadow: 0 2px 5px rgba(0,0,0,0.35);
                             cursor: pointer;
                         ">
-                            <span style="width: 5px; height: 5px; border-radius: 50%; background: ${light.state === 'rojo' ? '#ef4444' : '#334155'}; box-shadow: ${light.state === 'rojo' ? '0 0 5px #ef4444' : 'none'}"></span>
-                            <span style="width: 5px; height: 5px; border-radius: 50%; background: ${light.state === 'amarillo' ? '#eab308' : '#334155'}; box-shadow: ${light.state === 'amarillo' ? '0 0 5px #eab308' : 'none'}"></span>
-                            <span style="width: 5px; height: 5px; border-radius: 50%; background: ${light.state === 'verde' ? '#10b981' : '#334155'}; box-shadow: ${light.state === 'verde' ? '0 0 5px #10b981' : 'none'}"></span>
+                            <span style="
+                                width: 6px; 
+                                height: 6px; 
+                                border-radius: 50%; 
+                                background: ${lightColor}; 
+                                box-shadow: 0 0 5px ${lightColor};
+                            "></span>
                         </div>
                     `,
-                    iconSize: [24, 24],
-                    iconAnchor: [12, 12]
+                    iconSize: [16, 16],
+                    iconAnchor: [8, 8]
                 })
             });
 
@@ -1175,7 +1187,7 @@ export default function MapComponent({
                     </h4>
                     <p style="margin: 0 0 0.4rem 0; font-weight: 600; color: #f1f5f9;">Semáforo de Intersección</p>
                     <p style="margin: 0 0 0.4rem 0; font-size: 0.7rem; color: #94a3b8;"><b>Intersección:</b> ${light.intersection}</p>
-                    <p style="margin: 0; font-size: 0.72rem; color: ${light.state === 'verde' ? '#10b981' : (light.state === 'amarillo' ? '#eab308' : '#ef4444')}; font-weight: 700;">
+                    <p style="margin: 0; font-size: 0.72rem; color: ${lightColor}; font-weight: 700;">
                         Estado actual: ${light.state.toUpperCase()}
                     </p>
                 </div>
@@ -1187,7 +1199,7 @@ export default function MapComponent({
             marker.addTo(map);
             trafficLightLayersRef.current.push(marker);
         });
-    }, [trafficLights, mapLayers.trafficLights, activeRoute]);
+    }, [trafficLights, mapLayers.trafficLights, activeRoute, currentZoom]);
 
     // 3D Navigation Cyclist Tracker and Map Rotation
     useEffect(() => {
