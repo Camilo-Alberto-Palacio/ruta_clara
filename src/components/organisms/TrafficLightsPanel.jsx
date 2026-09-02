@@ -9,7 +9,10 @@ export default function TrafficLightsPanel({
     autoCycleActive,
     onForceGreenWave,
     greenWaveActive,
-    onToggleLightState
+    onToggleLightState,
+    dataSource = 'fallback',
+    isLoading = false,
+    onRefreshData
 }) {
     // Filter traffic lights for the active locality
     const activeLocalityLights = trafficLights.filter(light => light.localidad === localidad);
@@ -44,11 +47,46 @@ export default function TrafficLightsPanel({
 
     return (
         <div className="traffic-lights-panel-card animate-fade-in">
-            <h3>
-                <i className="fa-solid fa-traffic-light text-accent"></i> Semáforos e Intersecciones
-            </h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                <h3 style={{ margin: 0 }}>
+                    <i className="fa-solid fa-traffic-light text-accent"></i> Semáforos e Intersecciones
+                </h3>
+                {onRefreshData && (
+                    <button 
+                        onClick={onRefreshData}
+                        disabled={isLoading}
+                        className="btn-flat btn-flat-secondary"
+                        style={{ padding: '0.25rem 0.6rem', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.35rem', borderRadius: '0.5rem' }}
+                        title="Sincronizar con API de datos abiertos"
+                    >
+                        <i className={`fa-solid fa-arrows-rotate ${isLoading ? 'fa-spin' : ''}`} style={{ color: '#10b981' }}></i>
+                        {isLoading ? 'Cargando...' : 'Sincronizar'}
+                    </button>
+                )}
+            </div>
+
+            {/* Source status badge */}
+            <div style={{ 
+                display: 'inline-flex', 
+                alignItems: 'center', 
+                gap: '0.4rem', 
+                padding: '0.25rem 0.6rem', 
+                borderRadius: '9999px', 
+                fontSize: '0.7rem', 
+                fontWeight: 600,
+                background: dataSource === 'live_api' ? 'rgba(16, 185, 129, 0.12)' : (dataSource === 'cache' ? 'rgba(59, 130, 246, 0.12)' : 'rgba(100, 116, 139, 0.12)'),
+                color: dataSource === 'live_api' ? '#10b981' : (dataSource === 'cache' ? '#3b82f6' : '#64748b'),
+                marginBottom: '0.75rem',
+                border: '1px solid currentColor'
+            }}>
+                <i className={`fa-solid ${dataSource === 'live_api' ? 'fa-satellite-dish' : (dataSource === 'cache' ? 'fa-bolt' : 'fa-database')}`}></i>
+                {dataSource === 'live_api' && `API Oficial en Vivo (${trafficLights.length} semáforos)`}
+                {dataSource === 'cache' && `Datos Reales en Caché (${trafficLights.length} semáforos)`}
+                {dataSource === 'fallback' && `Inventario Local SDM (${trafficLights.length} semáforos)`}
+            </div>
+
             <p className="traffic-lights-desc">
-                Gestión en tiempo real de la red semafórica y cruces seguros en la ciclorruta.
+                Gestión en tiempo real de la red semafórica y cruces seguros en la ciclorruta de Bogotá.
             </p>
 
             {/* Smart Traffic Controls */}

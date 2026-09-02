@@ -13,6 +13,7 @@ import { bikeSegments as initialSegments, localitiesMap } from './data/bikeSegme
 import { constructionZones } from './data/constructionZones';
 import { trafficJams } from './data/trafficJams';
 import { trafficLights as initialTrafficLights } from './data/trafficLights';
+import { fetchBogotaTrafficLights } from './utils/trafficLightsService';
 import { 
     calculateRisk, 
     getRecommendations, 
@@ -64,8 +65,30 @@ export default function App() {
 
     // Traffic Lights State
     const [trafficLights, setTrafficLights] = useState(initialTrafficLights);
+    const [trafficLightsSource, setTrafficLightsSource] = useState('fallback');
+    const [isLoadingTrafficLights, setIsLoadingTrafficLights] = useState(false);
     const [autoCycleActive, setAutoCycleActive] = useState(true);
     const [greenWaveActive, setGreenWaveActive] = useState(false);
+
+    // Cargar semáforos reales de Bogotá al montar la aplicación
+    const loadTrafficLightsData = async (forceRefresh = false) => {
+        setIsLoadingTrafficLights(true);
+        try {
+            const result = await fetchBogotaTrafficLights(forceRefresh);
+            if (result && result.data && result.data.length > 0) {
+                setTrafficLights(result.data);
+                setTrafficLightsSource(result.source);
+            }
+        } catch (err) {
+            console.error('Error al cargar semáforos:', err);
+        } finally {
+            setIsLoadingTrafficLights(false);
+        }
+    };
+
+    useEffect(() => {
+        loadTrafficLightsData(false);
+    }, []);
 
     // 3D Navigation Simulator State
     const [isNavigating, setIsNavigating] = useState(false);
@@ -1003,6 +1026,9 @@ export default function App() {
             onForceGreenWave={handleForceGreenWave}
             greenWaveActive={greenWaveActive}
             onToggleLightState={handleToggleLightState}
+            dataSource={trafficLightsSource}
+            isLoading={isLoadingTrafficLights}
+            onRefreshData={() => loadTrafficLightsData(true)}
         />
     );
 
