@@ -13,6 +13,9 @@ import { bikeSegments as initialSegments, localitiesMap } from './data/bikeSegme
 import { constructionZones } from './data/constructionZones';
 import { trafficJams } from './data/trafficJams';
 import { trafficLights as initialTrafficLights } from './data/trafficLights';
+import { robberyReports } from './data/robberyReports';
+import { accidentPoints } from './data/accidentPoints';
+import { caiPoints } from './data/caiPoints';
 import { fetchBogotaTrafficLights } from './utils/trafficLightsService';
 import { audioGuidance } from './utils/audioGuidanceService';
 import { 
@@ -359,17 +362,36 @@ export default function App() {
                     citizenReports
                 );
 
+                // 1. Detect nearby robbery/crime reports within 100 meters
+                const nearbyRobbery = robberyReports.find(r => {
+                    const distDeg = Math.sqrt(Math.pow(currentCoord[0] - r.lat, 2) + Math.pow(currentCoord[1] - r.lng, 2));
+                    return (distDeg * 111000) <= 100;
+                });
+
+                // 2. Detect nearby traffic accidents within 100 meters
+                const nearbyAccident = accidentPoints.find(a => {
+                    const distDeg = Math.sqrt(Math.pow(currentCoord[0] - a.lat, 2) + Math.pow(currentCoord[1] - a.lng, 2));
+                    return (distDeg * 111000) <= 100;
+                });
+
+                // 3. Detect nearby police CAI within 90 meters
+                const nearbyCai = caiPoints.find(c => {
+                    const distDeg = Math.sqrt(Math.pow(currentCoord[0] - c.lat, 2) + Math.pow(currentCoord[1] - c.lng, 2));
+                    return (distDeg * 111000) <= 90;
+                });
+
+                // 4. Detect nearby IDU construction zones within radius
                 const nearbyConst = constructionZones.find(zone => {
                     const distDeg = Math.sqrt(Math.pow(currentCoord[0] - zone.lat, 2) + Math.pow(currentCoord[1] - zone.lng, 2));
                     return (distDeg * 111000) <= zone.radius;
                 });
 
-                // Detect nearby citizen reports within 45 meters
+                // 5. Detect nearby citizen reports within 80 meters (lighting, potholes, etc.)
                 const nearbyReport = citizenReports.find(report => {
                     const rCoords = report.properties?.coordenadas;
                     if (!rCoords) return false;
                     const distDeg = Math.sqrt(Math.pow(currentCoord[0] - rCoords[0], 2) + Math.pow(currentCoord[1] - rCoords[1], 2));
-                    return (distDeg * 111000) <= 45;
+                    return (distDeg * 111000) <= 80;
                 });
 
                 const currentRisk = riskInfo.level;
@@ -382,16 +404,33 @@ export default function App() {
                 }
                 lastRiskLevelRef.current = currentRisk;
 
-                if (nearbyConst) {
-                    setHudRecommendation('🚧 Obras viales del IDU adelante. Precaución.');
-                    audioGuidance.speakEvent(`const_${nearbyConst.lat}`, 'Obras viales adelante.', 50);
+                if (nearbyRobbery) {
+                    setHudRecommendation(`🔴 Alerta de Hurto: ${nearbyRobbery.name}`);
+                    audioGuidance.speakEvent(`rob_${nearbyRobbery.id}`, `Alerta, reporte de hurto cercano en ${nearbyRobbery.name}. Mantente atento.`, 40, true);
+                } else if (nearbyAccident) {
+                    setHudRecommendation(`🚗 Accidente de Tránsito: ${nearbyAccident.name}`);
+                    audioGuidance.speakEvent(`acc_${nearbyAccident.id}`, `Precaución, reporte de siniestro vial en ${nearbyAccident.name}.`, 40, true);
                 } else if (nearbyReport) {
                     const tipo = nearbyReport.properties.tipo_novedad;
-                    setHudRecommendation(`📢 Reporte ciudadano: ${tipo}`);
-                    audioGuidance.speakEvent(`rep_${nearbyReport.id}`, `Reporte en la vía: ${tipo}.`, 45);
+                    if (tipo.toLowerCase().includes('luminaria') || tipo.toLowerCase().includes('lobo') || tipo.toLowerCase().includes('oscur')) {
+                        setHudRecommendation('💡 Tramo con baja iluminación. Enciende luces.');
+                        audioGuidance.speakEvent(`light_${nearbyReport.id}`, 'Zona con poca iluminación reportada. Enciende tus luces.', 45, true);
+                    } else if (tipo.toLowerCase().includes('hueco') || tipo.toLowerCase().includes('daño') || tipo.toLowerCase().includes('destructiva')) {
+                        setHudRecommendation('⚠️ Daño o bache en ciclorruta reportado.');
+                        audioGuidance.speakEvent(`pothole_${nearbyReport.id}`, 'Bache o deterioro en la calzada adelante.', 45, true);
+                    } else {
+                        setHudRecommendation(`📢 Reporte ciudadano: ${tipo.split('/')[0]}`);
+                        audioGuidance.speakEvent(`rep_${nearbyReport.id}`, `Reporte ciudadano en la vía: ${tipo.split('/')[0]}.`, 45, true);
+                    }
+                } else if (nearbyConst) {
+                    setHudRecommendation('🚧 Obras viales del IDU adelante. Precaución.');
+                    audioGuidance.speakEvent(`const_${nearbyConst.lat}`, 'Obras viales adelante. Reduce la velocidad.', 50);
+                } else if (nearbyCai) {
+                    setHudRecommendation(`👮 CAI de Policía: ${nearbyCai.name}`);
+                    audioGuidance.speakEvent(`cai_${nearbyCai.id}`, `CAI de policía ${nearbyCai.name} cercano.`, 60);
                 } else if (simulationState.weather === 'lluvia') {
                     setHudRecommendation('🌧️ Calzada mojada por lluvias. Conduce con cuidado.');
-                    audioGuidance.speakEvent('rain_warning', 'Calzada resbaladiza.', 90);
+                    audioGuidance.speakEvent('rain_warning', 'Calzada resbaladiza por lluvia.', 90);
                 } else if (nearbyLight && nearbyLight.state === 'verde') {
                     setHudRecommendation('🟢 Cruce con semáforo en VERDE. Paso libre.');
                 } else {
@@ -1127,27 +1166,30 @@ export default function App() {
 
     const cockpitHUD = isNavigating && activeRoute && (
         <div className="fixed inset-0 pointer-events-none z-50 flex flex-col justify-between p-4 animate-fade-in select-none">
-            {/* 1. Top Navigation Maneuver Banner - Green and White Design */}
-            <div className="pointer-events-auto max-w-md w-full mx-auto bg-white/95 dark:bg-slate-900/95 backdrop-blur-md text-slate-900 dark:text-white rounded-3xl shadow-2xl p-3.5 border border-emerald-500/30 flex items-center gap-3.5 animate-slide-down">
+            {/* 1. Top Navigation Maneuver Banner - Crisp Pure White & Emerald Green */}
+            <div 
+                className="pointer-events-auto max-w-md w-full mx-auto rounded-3xl shadow-2xl p-4 border flex items-center gap-3.5 animate-slide-down"
+                style={{ background: '#ffffff', color: '#0f172a', borderColor: 'rgba(16, 185, 129, 0.4)', boxShadow: '0 10px 30px rgba(0, 0, 0, 0.15)' }}
+            >
                 <div className="w-12 h-12 rounded-2xl bg-emerald-600 border border-emerald-500 flex items-center justify-center flex-shrink-0 shadow-md">
                     <i className="fa-solid fa-arrow-turn-up text-xl text-white"></i>
                 </div>
                 <div className="flex flex-col flex-1 overflow-hidden">
                     <div className="flex items-baseline gap-1.5">
-                        <span className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
+                        <span className="text-xl font-black text-slate-900 tracking-tight">
                             {Math.max(15, Math.round((1 - (cyclistIndex / Math.max(1, activeRoute.coordinates.length))) * (parseFloat(activeRoute.distanceKm) * 1000)))} m
                         </span>
-                        <span className="text-2xs text-slate-500 dark:text-slate-400 uppercase font-bold">hacia</span>
+                        <span className="text-2xs text-slate-500 uppercase font-bold">hacia</span>
                     </div>
-                    <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 truncate">
+                    <span className="text-xs font-extrabold text-emerald-600 truncate">
                         {destInput ? destInput.split(',')[0] : 'Destino'}
                     </span>
-                    <span className="text-[11px] text-slate-600 dark:text-slate-300 font-semibold mt-0.5 truncate flex items-center gap-1">
+                    <span className="text-[11px] text-slate-600 font-semibold mt-0.5 truncate flex items-center gap-1">
                         {hudRecommendation}
                     </span>
                 </div>
                 {nextTrafficLight && (
-                    <div className="flex flex-col items-center justify-center px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex-shrink-0 shadow-inner">
+                    <div className="flex flex-col items-center justify-center px-2.5 py-1 rounded-xl bg-slate-50 border border-slate-200 flex-shrink-0 shadow-inner">
                         <i className="fa-solid fa-traffic-light text-base" style={{
                             color: nextTrafficLight.state === 'verde' ? '#10b981' : (nextTrafficLight.state === 'amarillo' ? '#eab308' : '#ef4444')
                         }}></i>
@@ -1158,19 +1200,25 @@ export default function App() {
                 )}
             </div>
 
-            {/* 2. Floating Circular Speedometer Widget (Lower Left - Green & White) */}
+            {/* 2. Floating Circular Speedometer Widget (Lower Left - Pure White & Emerald Green) */}
             <div className="flex justify-between items-end w-full max-w-lg mx-auto mb-2">
-                <div className="pointer-events-auto w-16 h-16 rounded-full bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-2 border-emerald-500 shadow-2xl flex flex-col items-center justify-center text-slate-900 dark:text-white">
-                    <span className="text-lg font-black tracking-tight leading-none text-slate-900 dark:text-white">{speedKmh}</span>
-                    <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 uppercase leading-none mt-0.5">km/h</span>
+                <div 
+                    className="pointer-events-auto w-16 h-16 rounded-full shadow-2xl flex flex-col items-center justify-center"
+                    style={{ background: '#ffffff', color: '#0f172a', border: '3px solid #10b981', boxShadow: '0 8px 25px rgba(16, 185, 129, 0.35)' }}
+                >
+                    <span className="text-lg font-black tracking-tight leading-none text-slate-900">{speedKmh}</span>
+                    <span className="text-[9px] font-extrabold text-emerald-600 uppercase leading-none mt-0.5">km/h</span>
                 </div>
 
                 {/* Quick Simulation Pause/Speed controls floating on right */}
                 {navigationMode === 'simulated' && (
-                    <div className="pointer-events-auto flex items-center gap-1.5 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl">
+                    <div 
+                        className="pointer-events-auto flex items-center gap-1.5 p-1.5 rounded-2xl shadow-2xl border"
+                        style={{ background: '#ffffff', color: '#0f172a', borderColor: '#e2e8f0', boxShadow: '0 8px 25px rgba(0, 0, 0, 0.1)' }}
+                    >
                         <button
                             onClick={() => setNavStatus(navStatus === 'running' ? 'paused' : 'running')}
-                            className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 flex items-center justify-center cursor-pointer border-none text-xs hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                            className="w-8 h-8 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center cursor-pointer border-none text-xs hover:bg-slate-200 transition-colors"
                             title={navStatus === 'running' ? "Pausar" : "Reanudar"}
                         >
                             <i className={`fa-solid ${navStatus === 'running' ? 'fa-pause text-amber-500' : 'fa-play text-emerald-600'}`}></i>
@@ -1180,7 +1228,7 @@ export default function App() {
                                 key={mult}
                                 onClick={() => setNavSpeedMultiplier(mult)}
                                 className={`px-2 py-1 rounded-lg text-2xs font-extrabold cursor-pointer border-none transition-all ${
-                                    navSpeedMultiplier === mult ? 'bg-emerald-600 text-white shadow-xs' : 'bg-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                                    navSpeedMultiplier === mult ? 'bg-emerald-600 text-white shadow-xs' : 'bg-transparent text-slate-600 hover:text-slate-900'
                                 }`}
                             >
                                 {mult}x
@@ -1190,13 +1238,16 @@ export default function App() {
                 )}
             </div>
 
-            {/* 3. Bottom Card (Arrival Time, Remaining Km, Audio & Exit - Green & White) */}
-            <div className="pointer-events-auto max-w-md w-full mx-auto bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-3xl shadow-2xl p-4 border border-emerald-500/20 flex items-center justify-between animate-slide-up text-slate-900 dark:text-white">
+            {/* 3. Bottom Card (Arrival Time, Remaining Km, Audio & Exit - Pure White & Emerald Green) */}
+            <div 
+                className="pointer-events-auto max-w-md w-full mx-auto rounded-3xl shadow-2xl p-4 border flex items-center justify-between animate-slide-up"
+                style={{ background: '#ffffff', color: '#0f172a', borderColor: '#e2e8f0', boxShadow: '0 12px 35px rgba(0, 0, 0, 0.15)' }}
+            >
                 <div className="flex flex-col">
-                    <span className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+                    <span className="text-2xl font-black tracking-tight text-slate-900">
                         {getEstimatedArrivalTime(activeRoute.durationMin)}
                     </span>
-                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mt-0.5">
+                    <span className="text-xs font-bold text-slate-500 flex items-center gap-1.5 mt-0.5">
                         <span>{activeRoute.durationMin} min</span>
                         <span>•</span>
                         <span>{activeRoute.distanceKm} km</span>
@@ -1217,8 +1268,8 @@ export default function App() {
                         }}
                         className={`w-10 h-10 rounded-full flex items-center justify-center cursor-pointer border-none transition-all ${
                             voiceEnabled 
-                                ? 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200' 
-                                : 'bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400'
+                                ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' 
+                                : 'bg-rose-100 text-rose-600'
                         }`}
                         title={voiceEnabled ? "Silenciar voz" : "Activar voz"}
                     >
@@ -1240,7 +1291,7 @@ export default function App() {
                                 audioGuidance.speakRaw("Voz en español seleccionada.");
                             }
                         }}
-                        className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 flex items-center justify-center cursor-pointer border-none transition-all"
+                        className="w-10 h-10 rounded-full bg-slate-100 text-slate-700 hover:bg-slate-200 flex items-center justify-center cursor-pointer border-none transition-all"
                         title="Cambiar tipo de voz"
                     >
                         <i className="fa-solid fa-microphone-lines text-xs"></i>
