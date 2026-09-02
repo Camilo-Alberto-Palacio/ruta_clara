@@ -1224,24 +1224,27 @@ export default function MapComponent({
             return;
         }
 
-        // Calculate travel bearing for rotating cyclist directional indicator
+        // Calculate travel bearing for rotating cyclist directional indicator with lookahead smoothing
         let bearing = 0;
         if (activeRoute && activeRoute.coordinates && cyclistIndex !== undefined) {
             const coords = activeRoute.coordinates;
-            const nextIdx = Math.min(cyclistIndex + 1, coords.length - 1);
-            if (coords[cyclistIndex] && coords[nextIdx]) {
-                const getBearing = (from, to) => {
-                    const lat1 = from[0] * Math.PI / 180;
-                    const lon1 = from[1] * Math.PI / 180;
-                    const lat2 = to[0] * Math.PI / 180;
-                    const lon2 = to[1] * Math.PI / 180;
-                    const dLon = lon2 - lon1;
-                    const y = Math.sin(dLon) * Math.cos(lat2);
-                    const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
-                    const brng = Math.atan2(y, x) * 180 / Math.PI;
-                    return (brng + 360) % 360;
-                };
-                bearing = Math.round(getBearing(coords[cyclistIndex], coords[nextIdx]));
+            // Look ahead ~25-35m (4 to 6 points) to get a stable, smooth road tangent
+            const targetAheadIdx = Math.min(cyclistIndex + 5, coords.length - 1);
+            const currentIdx = Math.min(cyclistIndex, coords.length - 2);
+
+            const pt1 = coords[currentIdx];
+            const pt2 = coords[targetAheadIdx];
+
+            if (pt1 && pt2 && (pt1[0] !== pt2[0] || pt1[1] !== pt2[1])) {
+                const lat1 = pt1[0] * Math.PI / 180;
+                const lon1 = pt1[1] * Math.PI / 180;
+                const lat2 = pt2[0] * Math.PI / 180;
+                const lon2 = pt2[1] * Math.PI / 180;
+                const dLon = lon2 - lon1;
+                const y = Math.sin(dLon) * Math.cos(lat2);
+                const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+                const rawBrng = Math.atan2(y, x) * 180 / Math.PI;
+                bearing = Math.round((rawBrng + 360) % 360);
             }
         }
 
@@ -1256,7 +1259,7 @@ export default function MapComponent({
                 }
             }
         } else {
-            // Initial marker creation with pulse ring and smooth CSS transitions
+            // Initial marker creation with high-precision GPS navigation arrow
             const cyclistIcon = L.divIcon({
                 className: 'cyclist-avatar-marker-wrapper',
                 html: `
@@ -1267,23 +1270,24 @@ export default function MapComponent({
                         align-items: center;
                         justify-content: center;
                         transform: rotate(${bearing}deg);
-                        transition: transform 0.3s ease-out;
+                        transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
                     ">
                         <div style="
                             position: relative;
-                            width: 38px;
-                            height: 38px;
-                            background: linear-gradient(135deg, #10b981, #059669);
+                            width: 36px;
+                            height: 36px;
+                            background: linear-gradient(135deg, #10b981, #047857);
                             border: 3px solid #ffffff;
                             border-radius: 50%;
                             display: flex;
                             align-items: center;
                             justify-content: center;
-                            color: #ffffff;
-                            box-shadow: 0 4px 14px rgba(16, 185, 129, 0.7);
+                            box-shadow: 0 4px 14px rgba(16, 185, 129, 0.8), 0 0 0 6px rgba(16, 185, 129, 0.2);
                         ">
-                            <!-- Direction heading arrow -->
-                            <i class="fa-solid fa-location-arrow" style="font-size: 17px; transform: rotate(-45deg);"></i>
+                            <!-- High precision Upright GPS Navigation Arrow (Points strictly North at 0°) -->
+                            <svg viewBox="0 0 24 24" width="20" height="20" style="fill: #ffffff; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5)); transform: translateY(-1px);">
+                                <path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z"/>
+                            </svg>
                         </div>
                     </div>
                 `,
@@ -1300,11 +1304,16 @@ export default function MapComponent({
             map.flyTo(cyclistCoords, 17, { duration: 0.8 });
         }
 
-        // Smooth camera follow without resetting tile matrices
-        map.panTo(cyclistCoords, { 
+        // Chase Camera (Camera placed behind the cyclist, looking forward towards the upcoming route)
+        const forwardMeters = 32; // Offset center 32m forward in direction of travel
+        const bearingRad = bearing * Math.PI / 180;
+        const targetLat = cyclistCoords[0] + (forwardMeters / 111000) * Math.cos(bearingRad);
+        const targetLng = cyclistCoords[1] + (forwardMeters / (111000 * Math.cos(cyclistCoords[0] * Math.PI / 180))) * Math.sin(bearingRad);
+
+        map.panTo([targetLat, targetLng], { 
             animate: true, 
-            duration: 0.35, 
-            easeLinearity: 0.25 
+            duration: 0.3, 
+            easeLinearity: 0.2 
         });
     }, [isNavigating, cyclistCoords, cyclistIndex, activeRouteId]);
 
