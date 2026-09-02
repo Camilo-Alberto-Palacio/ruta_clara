@@ -287,7 +287,7 @@ export default function App() {
                 setCyclistIndex(0);
                 setSpeedKmh(0);
                 setNextTrafficLight(null);
-                audioGuidance.speak("¡Felicidades! Has llegado a tu destino de forma segura.", true);
+                audioGuidance.speakRaw("¡Felicidades! Has llegado a tu destino.", true);
                 alert("¡Has llegado a tu destino de forma segura!");
                 return;
             }
@@ -308,7 +308,7 @@ export default function App() {
                 if (nearbyLight.state === 'rojo') {
                     setSpeedKmh(0);
                     setHudRecommendation('🚦 Semáforo en ROJO. Esperando cambio a verde...');
-                    audioGuidance.speak('Atención: Semáforo en rojo. Prepárate para detenerte.');
+                    audioGuidance.speakEvent(`light_${nearbyLight.coordinates.join('_')}`, 'Semáforo en rojo.', 35, true);
                     waitTicks++;
                     if (waitTicks < 6) {
                         return; // pause cyclist progression temporarily
@@ -342,7 +342,7 @@ export default function App() {
                     citizenReports
                 );
 
-                const hasConst = constructionZones.some(zone => {
+                const nearbyConst = constructionZones.find(zone => {
                     const distDeg = Math.sqrt(Math.pow(currentCoord[0] - zone.lat, 2) + Math.pow(currentCoord[1] - zone.lng, 2));
                     return (distDeg * 111000) <= zone.radius;
                 });
@@ -355,19 +355,19 @@ export default function App() {
                     return (distDeg * 111000) <= 45;
                 });
 
-                if (hasConst) {
+                if (nearbyConst) {
                     setHudRecommendation('🚧 Obras viales del IDU adelante. Precaución.');
-                    audioGuidance.speak('Precaución: Obras viales del IDU en la vía. Disminuye la velocidad.');
+                    audioGuidance.speakEvent(`const_${nearbyConst.lat}`, 'Obras viales adelante.', 50);
                 } else if (nearbyReport) {
                     const tipo = nearbyReport.properties.tipo_novedad;
                     setHudRecommendation(`📢 Reporte ciudadano: ${tipo}`);
-                    audioGuidance.speak(`Atención: Reporte de ciclistas de ${tipo} en la ciclorruta.`);
+                    audioGuidance.speakEvent(`rep_${nearbyReport.id}`, `Reporte en la vía: ${tipo}.`, 45);
                 } else if (riskInfo.level === 'Alto') {
                     setHudRecommendation('⚠️ Sector con alerta de seguridad. Mantente en movimiento.');
-                    audioGuidance.speak('Alerta de seguridad: Sector con alto índice de incidentes. Mantén un pedaleo constante y no te detengas.');
+                    audioGuidance.speakEvent('high_risk_zone', 'Zona de precaución. Mantén el pedaleo.', 60);
                 } else if (simulationState.weather === 'lluvia') {
                     setHudRecommendation('🌧️ Calzada mojada por lluvias. Conduce con cuidado.');
-                    audioGuidance.speak('Precaución: Calzada mojada por lluvias. Evita frenadas bruscas.');
+                    audioGuidance.speakEvent('rain_warning', 'Calzada resbaladiza.', 90);
                 } else if (nearbyLight && nearbyLight.state === 'verde') {
                     setHudRecommendation('🟢 Cruce con semáforo en VERDE. Paso libre.');
                 } else {
@@ -1181,35 +1181,66 @@ export default function App() {
                             </button>
                         ))}
                     </div>
-                    {/* Voice Guidance Toggle */}
-                    <button
-                        onClick={() => {
-                            const nextVal = !voiceEnabled;
-                            setVoiceEnabled(nextVal);
-                            if (nextVal) {
-                                audioGuidance.speak("Copiloto de voz activado.");
-                            } else {
-                                audioGuidance.stop();
-                            }
-                        }}
-                        style={{
-                            padding: '0.4rem 0.85rem',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.4rem',
-                            borderRadius: '6px',
-                            fontSize: '0.75rem',
-                            fontWeight: '600',
-                            cursor: 'pointer',
-                            border: '1px solid rgba(255, 255, 255, 0.15)',
-                            background: voiceEnabled ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
-                            color: voiceEnabled ? '#a7f3d0' : '#fca5a5'
-                        }}
-                        title={voiceEnabled ? "Silenciar asistente de voz" : "Activar asistente de voz"}
-                    >
-                        <i className={`fa-solid ${voiceEnabled ? 'fa-volume-high' : 'fa-volume-xmark'}`}></i>
-                        {voiceEnabled ? 'Voz On' : 'Voz Off'}
-                    </button>
+                    {/* Voice Guidance Controls & Voice Selector */}
+                    <div className="relative flex items-center gap-1.5">
+                        <button
+                            onClick={() => {
+                                const nextVal = !voiceEnabled;
+                                setVoiceEnabled(nextVal);
+                                if (nextVal) {
+                                    audioGuidance.speakRaw("Copiloto de voz activado.");
+                                } else {
+                                    audioGuidance.stop();
+                                }
+                            }}
+                            style={{
+                                padding: '0.4rem 0.75rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.35rem',
+                                borderRadius: '6px',
+                                fontSize: '0.75rem',
+                                fontWeight: '600',
+                                cursor: 'pointer',
+                                border: '1px solid rgba(255, 255, 255, 0.15)',
+                                background: voiceEnabled ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                                color: voiceEnabled ? '#a7f3d0' : '#fca5a5'
+                            }}
+                            title={voiceEnabled ? "Silenciar asistente de voz" : "Activar asistente de voz"}
+                        >
+                            <i className={`fa-solid ${voiceEnabled ? 'fa-volume-high' : 'fa-volume-xmark'}`}></i>
+                            {voiceEnabled ? 'Voz On' : 'Voz Off'}
+                        </button>
+
+                        <button
+                            onClick={() => {
+                                const voices = audioGuidance.getVoices();
+                                if (voices.length > 1) {
+                                    // Cycle through available Spanish voices
+                                    const currentUri = audioGuidance.selectedVoiceURI;
+                                    const currIdx = voices.findIndex(v => v.uri === currentUri);
+                                    const nextIdx = (currIdx + 1) % voices.length;
+                                    const nextVoice = voices[nextIdx];
+                                    audioGuidance.setVoice(nextVoice.uri);
+                                    audioGuidance.speakRaw(`Voz cambiada a ${nextVoice.name}.`);
+                                } else {
+                                    audioGuidance.speakRaw("Voz por defecto en español seleccionada.");
+                                }
+                            }}
+                            style={{
+                                padding: '0.4rem 0.6rem',
+                                borderRadius: '6px',
+                                border: '1px solid rgba(255, 255, 255, 0.15)',
+                                background: 'rgba(15, 23, 42, 0.5)',
+                                color: '#e2e8f0',
+                                fontSize: '0.75rem',
+                                cursor: 'pointer'
+                            }}
+                            title="Cambiar tipo de voz (Femenina / Masculina / Natural)"
+                        >
+                            <i className="fa-solid fa-microphone-lines"></i> Cambiar Voz
+                        </button>
+                    </div>
                 </div>
             ) : (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.72rem', color: '#06b6d4', background: 'rgba(6, 182, 212, 0.12)', border: '1px solid rgba(6, 182, 212, 0.25)', padding: '0.35rem 1rem', borderRadius: '20px', margin: '0.25rem 0', fontWeight: '600' }}>

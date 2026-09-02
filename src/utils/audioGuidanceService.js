@@ -1,33 +1,72 @@
 /**
  * Audio Guidance & Voice Copilot Service for Ruta Clara
- * Uses Web Speech API (SpeechSynthesis) to provide spoken real-time warnings and safety suggestions.
+ * Provides natural, non-intrusive voice safety alerts with strict event cooldowns
+ * and selectable voice models.
  */
 
 class AudioGuidanceService {
     constructor() {
         this.enabled = true;
         this.synth = typeof window !== 'undefined' && 'speechSynthesis' in window ? window.speechSynthesis : null;
-        this.lastSpokenText = '';
+        this.cooldowns = new Map(); // eventKey -> timestamp
         this.lastSpokenTime = 0;
-        this.debounceMs = 7000; // Do not repeat identical warning within 7 seconds
-        this.preferredVoice = null;
+        this.minGlobalIntervalMs = 12000; // Minimum 12 seconds between any non-urgent voice cues
+        this.selectedVoiceURI = null;
+        this.selectedVoice = null;
+        this.availableVoices = [];
 
         if (this.synth) {
-            this.initVoice();
+            this.refreshVoices();
             if (this.synth.onvoiceschanged !== undefined) {
-                this.synth.onvoiceschanged = () => this.initVoice();
+                this.synth.onvoiceschanged = () => this.refreshVoices();
             }
         }
     }
 
-    initVoice() {
+    refreshVoices() {
         if (!this.synth) return;
-        const voices = this.synth.getVoices();
-        // Look for Spanish voices (Latin American / Colombia preferred, fallback to Spanish)
-        this.preferredVoice = voices.find(v => v.lang === 'es-CO') ||
-                              voices.find(v => v.lang.startsWith('es-')) ||
-                              voices.find(v => v.lang.includes('es')) ||
-                              null;
+        const all = this.synth.getVoices() || [];
+        // Filter Spanish voices
+        this.availableVoices = all.filter(v => 
+            v.lang.startsWith('es') || 
+            v.lang.includes('ES') || 
+            v.lang.includes('spanish') || 
+            v.name.toLowerCase().includes('spanish')
+        );
+
+        // Pick best natural voice by default
+        if (!this.selectedVoice && this.availableVoices.length > 0) {
+            // Prioritize natural / neural / latin voices
+            const natural = this.availableVoices.find(v => 
+                v.name.includes('Natural') || 
+                v.name.includes('Online') || 
+                v.name.includes('Google')
+            );
+            const latin = this.availableVoices.find(v => v.lang === 'es-CO' || v.lang === 'es-419' || v.lang === 'es-US' || v.lang === 'es-MX');
+            this.selectedVoice = natural || latin || this.availableVoices[0];
+            this.selectedVoiceURI = this.selectedVoice.voiceURI;
+        } else if (this.selectedVoiceURI) {
+            this.selectedVoice = this.availableVoices.find(v => v.voiceURI === this.selectedVoiceURI) || this.selectedVoice;
+        }
+    }
+
+    getVoices() {
+        this.refreshVoices();
+        return this.availableVoices.map(v => ({
+            uri: v.voiceURI,
+            name: v.name.replace(/Microsoft |Google |Android /g, ''),
+            lang: v.lang,
+            isNatural: v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Online')
+        }));
+    }
+
+    setVoice(voiceURI) {
+        this.selectedVoiceURI = voiceURI;
+        this.refreshVoices();
+        const match = this.availableVoices.find(v => v.voiceURI === voiceURI);
+        if (match) {
+            this.selectedVoice = match;
+        }
     }
 
     setEnabled(val) {
@@ -37,39 +76,60 @@ class AudioGuidanceService {
         }
     }
 
-    speak(text, priority = false) {
-        if (!this.enabled || !this.synth || !text) return;
+    /**
+     * Speaks an event with strict cooldown protection (prevents annoying repetitions)
+     */
+    speakEvent(eventKey, text, cooldownSeconds = 45, isPriority = false) {
+        if (!this.enabled || !this.synth || !text) return false;
 
         const now = Date.now();
-        // Clean markdown/emojis for natural speech
+
+        // 1. Check event-specific cooldown
+        if (eventKey && this.cooldowns.has(eventKey)) {
+            const lastTime = this.cooldowns.get(eventKey);
+            if ((now - lastTime) < (cooldownSeconds * 1000)) {
+                return false; // Still on cooldown, do not speak
+            }
+        }
+
+        // 2. Check global minimum interval between voice alerts (unless priority)
+        if (!isPriority && (now - this.lastSpokenTime) < this.minGlobalIntervalMs) {
+            return false;
+        }
+
+        // Register cooldown
+        if (eventKey) {
+            this.cooldowns.set(eventKey, now);
+        }
+        this.lastSpokenTime = now;
+
+        this.speakRaw(text, isPriority);
+        return true;
+    }
+
+    speakRaw(text, isPriority = false) {
+        if (!this.enabled || !this.synth || !text) return;
+
         const cleanText = text
-            .replace(/[🚦🚧⚠️🌧️🚴🟢🛑🔊🔇✨🎯]/gu, '')
+            .replace(/[🚦🚧⚠️🌧️🚴🟢🛑🔊🔇✨🎯📢]/gu, '')
             .replace(/\s+/g, ' ')
             .trim();
 
         if (!cleanText) return;
 
-        // Debounce exact repetitions
-        if (!priority && cleanText === this.lastSpokenText && (now - this.lastSpokenTime) < this.debounceMs) {
-            return;
-        }
-
-        if (priority) {
+        if (isPriority) {
             this.synth.cancel();
         }
 
         const utterance = new SpeechSynthesisUtterance(cleanText);
-        utterance.lang = 'es-CO';
-        utterance.rate = 1.05; // Slightly lively pace
-        utterance.pitch = 1.0;
+        utterance.lang = this.selectedVoice ? this.selectedVoice.lang : 'es-CO';
+        utterance.rate = 0.95; // Calm, clear, natural pace (not rushed)
+        utterance.pitch = 1.0; // Natural balanced pitch
         utterance.volume = 1.0;
 
-        if (this.preferredVoice) {
-            utterance.voice = this.preferredVoice;
+        if (this.selectedVoice) {
+            utterance.voice = this.selectedVoice;
         }
-
-        this.lastSpokenText = cleanText;
-        this.lastSpokenTime = now;
 
         this.synth.speak(utterance);
     }
@@ -78,6 +138,7 @@ class AudioGuidanceService {
         if (this.synth) {
             this.synth.cancel();
         }
+        this.cooldowns.clear();
     }
 }
 
