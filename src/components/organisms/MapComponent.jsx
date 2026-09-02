@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import L from 'leaflet';
 import { localitiesMap } from '../../data/bikeSegments';
 import { caiPoints } from '../../data/caiPoints';
@@ -178,7 +178,7 @@ export default function MapComponent({
         });
 
         // Initial Tile Layer based on mapStyle
-        let initialUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+        let initialUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
         let initialAttr = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
         
         if (mapStyle === 'terrain') {
@@ -190,7 +190,7 @@ export default function MapComponent({
             initialUrl,
             {
                 attribution: initialAttr,
-                subdomains: mapStyle === 'terrain' ? 'abc' : ['a', 'b', 'c'],
+                subdomains: mapStyle === 'terrain' ? 'abc' : 'abc',
                 maxZoom: mapStyle === 'terrain' ? 17 : 19,
                 className: mapStyle === 'dark' ? 'dark-tiles' : ''
             }
@@ -370,7 +370,7 @@ export default function MapComponent({
         map.removeLayer(tileLayerRef.current);
 
         // Add new tile layer based on mapStyle
-        let newUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+        let newUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
         let attr = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
         
         if (mapStyle === 'terrain') {
@@ -378,12 +378,15 @@ export default function MapComponent({
             attr = 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, SRTM | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)';
         }
 
-        const newTiles = L.tileLayer(newUrl, {
-            attribution: attr,
-            subdomains: mapStyle === 'terrain' ? 'abc' : ['a', 'b', 'c'],
-            maxZoom: mapStyle === 'terrain' ? 17 : 19,
-            className: mapStyle === 'dark' ? 'dark-tiles' : ''
-        }).addTo(map);
+        const newTiles = L.tileLayer(
+            newUrl,
+            {
+                attribution: attr,
+                subdomains: mapStyle === 'terrain' ? 'abc' : 'abc',
+                maxZoom: mapStyle === 'terrain' ? 17 : 19,
+                className: mapStyle === 'dark' ? 'dark-tiles' : ''
+            }
+        ).addTo(map);
 
         tileLayerRef.current = newTiles;
     }, [mapStyle]);
