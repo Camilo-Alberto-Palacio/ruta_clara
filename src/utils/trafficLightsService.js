@@ -52,14 +52,15 @@ export async function fetchBogotaTrafficLights(forceRefresh = false) {
 
     // 2. Consulta Overpass QL para Bogotá (Caja delimitadora de Bogotá urbano)
     const overpassUrl = 'https://overpass-api.de/api/interpreter';
-    const query = `[out:json][timeout:12];
+    const query = `[out:json][timeout:15];
 (
-  node["highway"="traffic_signals"](4.46,-74.22,4.78,-74.02);
+  node["highway"="traffic_signals"](4.45,-74.25,4.80,-74.00);
+  node["traffic_signals"="crossing"](4.45,-74.25,4.80,-74.00);
 );
-out body 250;`;
+out body 1200;`;
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 9000);
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
 
     try {
         const response = await fetch(overpassUrl, {

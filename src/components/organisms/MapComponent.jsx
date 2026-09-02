@@ -21,7 +21,7 @@ function isPointInPolygon(point, polygonCoords) {
 }
 
 // Helper: check if a [lat, lng] point is within thresholdMeters of any segment in routeCoords
-function isNearRoute(lat, lng, routeCoords, thresholdMeters = 200) {
+function isNearRoute(lat, lng, routeCoords, thresholdMeters = 450) {
     if (!routeCoords || routeCoords.length === 0) return false;
     const thresholdDeg = thresholdMeters / 111000;
     const thresholdSq = thresholdDeg * thresholdDeg;
@@ -34,7 +34,7 @@ function isNearRoute(lat, lng, routeCoords, thresholdMeters = 200) {
 }
 
 // Helper: determine if a marker should be rendered based on active route OR map zoom level
-function shouldShowMarker(lat, lng, routeCoords, currentZoom, minZoomWithoutRoute = 14, thresholdMeters = 200) {
+function shouldShowMarker(lat, lng, routeCoords, currentZoom, minZoomWithoutRoute = 13, thresholdMeters = 450) {
     if (routeCoords && routeCoords.length > 0) {
         return isNearRoute(lat, lng, routeCoords, thresholdMeters);
     }
@@ -1328,15 +1328,19 @@ export default function MapComponent({
             }).addTo(map);
 
             cyclistMarkerRef.current = cyclistMarker;
-            map.flyTo(cyclistCoords, 17, { duration: 0.6 });
+            map.setView(cyclistCoords, 17);
         }
 
-        // Smooth camera follow without any clipping or partial window distortion
-        map.panTo(cyclistCoords, { 
-            animate: true,
-            duration: 0.25,
-            easeLinearity: 0.25
-        });
+        // Ensure street-level zoom 17 for close situational awareness during navigation
+        if (map.getZoom() < 16) {
+            map.setView(cyclistCoords, 17);
+        } else {
+            map.panTo(cyclistCoords, { 
+                animate: true,
+                duration: 0.25,
+                easeLinearity: 0.25
+            });
+        }
     }, [isNavigating, cyclistCoords, cyclistIndex, cyclistBearing, activeRouteId]);
 
     // 9. Zoom to specific coordinates when requested (e.g. from citizen reports panel)
