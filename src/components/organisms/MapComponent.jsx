@@ -103,6 +103,7 @@ export default function MapComponent({
     isNavigating = false,
     cyclistCoords = null,
     cyclistIndex = 0,
+    cyclistBearing = 0,
     activeRoute = null,
     leftDrawerOpen = true,
     rightDrawerOpen = true,
@@ -111,7 +112,6 @@ export default function MapComponent({
     // Derive the active route's coordinates for proximity filtering
     const activeRouteCoords = activeRoute ? activeRoute.coordinates : null;
     const mapContainerRef = useRef(null);
-    const wazeViewportRef = useRef(null);
     const mapRef = useRef(null);
     const localidadesLayerRef = useRef(null);
     const activePolygonsRef = useRef({});
@@ -1233,18 +1233,14 @@ export default function MapComponent({
         });
     }, [trafficLights, mapLayers.trafficLights, activeRoute, currentZoom]);
 
-    // 3D Navigation Cyclist Tracker and Map Rotation
+    // 3D Navigation Cyclist Tracker and Camera Follow
     useEffect(() => {
         const map = mapRef.current;
         if (!isNavigating || !cyclistCoords) {
-            // Remove cyclist marker, reset 3D transform, and restore user map interactions
+            // Remove cyclist marker and restore user map interactions
             if (cyclistMarkerRef.current) {
                 map.removeLayer(cyclistMarkerRef.current);
                 cyclistMarkerRef.current = null;
-            }
-            if (wazeViewportRef.current) {
-                wazeViewportRef.current.style.transform = 'none';
-                wazeViewportRef.current.style.transition = 'transform 0.5s ease-out';
             }
             map.dragging.enable();
             map.touchZoom.enable();
@@ -1255,36 +1251,13 @@ export default function MapComponent({
             return;
         }
 
-        // Disable manual pan/zoom during active 3D navigation to keep camera locked behind vehicle
+        // Disable manual pan/zoom during active navigation to keep camera locked on vehicle
         map.dragging.disable();
         map.touchZoom.disable();
         map.doubleClickZoom.disable();
         map.scrollWheelZoom.disable();
         map.boxZoom.disable();
         map.keyboard.disable();
-
-        // Calculate travel bearing along immediate route tangent
-        let bearing = 0;
-        if (activeRoute && activeRoute.coordinates && cyclistIndex !== undefined) {
-            const coords = activeRoute.coordinates;
-            const currentIdx = Math.min(cyclistIndex, coords.length - 2);
-            const targetAheadIdx = Math.min(cyclistIndex + 2, coords.length - 1);
-
-            const pt1 = coords[currentIdx];
-            const pt2 = coords[targetAheadIdx];
-
-            if (pt1 && pt2 && (pt1[0] !== pt2[0] || pt1[1] !== pt2[1])) {
-                const lat1 = pt1[0] * Math.PI / 180;
-                const lon1 = pt1[1] * Math.PI / 180;
-                const lat2 = pt2[0] * Math.PI / 180;
-                const lon2 = pt2[1] * Math.PI / 180;
-                const dLon = lon2 - lon1;
-                const y = Math.sin(dLon) * Math.cos(lat2);
-                const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
-                const rawBrng = Math.atan2(y, x) * 180 / Math.PI;
-                bearing = Math.round((rawBrng + 360) % 360);
-            }
-        }
 
         // If marker already exists, smoothly update position and rotate arrow to point along tangent
         if (cyclistMarkerRef.current) {
@@ -1293,17 +1266,17 @@ export default function MapComponent({
             if (el) {
                 const arrowEl = el.querySelector('.waze-arrow-icon');
                 if (arrowEl) {
-                    arrowEl.style.transform = `rotate(${bearing}deg)`;
+                    arrowEl.style.transform = `rotate(${cyclistBearing}deg)`;
                 }
             }
         } else {
-            // Waze-style 3D Cyan Navigation Cursor / Puck
+            // Waze-style Cyan Navigation Cursor / Puck with dynamic tangent rotation
             const cyclistIcon = L.divIcon({
                 className: 'waze-vehicle-puck-wrapper',
                 html: `
                     <div style="
-                        width: 50px;
-                        height: 50px;
+                        width: 48px;
+                        height: 48px;
                         display: flex;
                         align-items: center;
                         justify-content: center;
@@ -1312,41 +1285,41 @@ export default function MapComponent({
                         <!-- Pulse glow halo under vehicle -->
                         <div style="
                             position: absolute;
-                            width: 44px;
-                            height: 44px;
+                            width: 42px;
+                            height: 42px;
                             background: rgba(6, 182, 212, 0.35);
                             border-radius: 50%;
                             filter: blur(4px);
                         "></div>
-                        <!-- Waze-style Cyan 3D Arrow / Puck with dynamic rotation -->
+                        <!-- Cyan Navigation Cursor -->
                         <div style="
                             position: relative;
-                            width: 38px;
-                            height: 38px;
+                            width: 36px;
+                            height: 36px;
                             background: linear-gradient(135deg, #06b6d4, #0891b2);
                             border: 3.5px solid #ffffff;
                             border-radius: 50%;
                             display: flex;
                             align-items: center;
                             justify-content: center;
-                            box-shadow: 0 8px 18px rgba(6, 182, 212, 0.8), 0 2px 6px rgba(0,0,0,0.4);
+                            box-shadow: 0 6px 16px rgba(6, 182, 212, 0.8), 0 2px 6px rgba(0,0,0,0.35);
                         ">
                             <div class="waze-arrow-icon" style="
                                 display: flex;
                                 align-items: center;
                                 justify-content: center;
-                                transform: rotate(${bearing}deg);
+                                transform: rotate(${cyclistBearing}deg);
                                 transition: transform 0.15s ease-out;
                             ">
-                                <svg viewBox="0 0 24 24" width="22" height="22" style="fill: #ffffff; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.5)); transform: translateY(-1px);">
+                                <svg viewBox="0 0 24 24" width="20" height="20" style="fill: #ffffff; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5)); transform: translateY(-1px);">
                                     <path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z"/>
                                 </svg>
                             </div>
                         </div>
                     </div>
                 `,
-                iconSize: [50, 50],
-                iconAnchor: [25, 25]
+                iconSize: [48, 48],
+                iconAnchor: [24, 24]
             });
 
             const cyclistMarker = L.marker(cyclistCoords, { 
@@ -1355,26 +1328,16 @@ export default function MapComponent({
             }).addTo(map);
 
             cyclistMarkerRef.current = cyclistMarker;
-            map.setView(cyclistCoords, 17);
+            map.flyTo(cyclistCoords, 17, { duration: 0.6 });
         }
 
-        // Apply Waze 3D Heading-Up Navigation Camera Transformation on viewport container
-        if (wazeViewportRef.current) {
-            wazeViewportRef.current.style.transformOrigin = '50% 65%';
-            wazeViewportRef.current.style.transform = `perspective(900px) rotateX(42deg) rotateZ(${-bearing}deg) scale(1.35)`;
-            wazeViewportRef.current.style.transition = 'transform 0.25s linear';
-        }
-
-        // Pan camera smoothly forward 25m along tangent
-        const forwardMeters = 25;
-        const bearingRad = bearing * Math.PI / 180;
-        const targetLat = cyclistCoords[0] + (forwardMeters / 111000) * Math.cos(bearingRad);
-        const targetLng = cyclistCoords[1] + (forwardMeters / (111000 * Math.cos(cyclistCoords[0] * Math.PI / 180))) * Math.sin(bearingRad);
-
-        map.panTo([targetLat, targetLng], { 
-            animate: false 
+        // Smooth camera follow without any clipping or partial window distortion
+        map.panTo(cyclistCoords, { 
+            animate: true,
+            duration: 0.25,
+            easeLinearity: 0.25
         });
-    }, [isNavigating, cyclistCoords, cyclistIndex, activeRouteId]);
+    }, [isNavigating, cyclistCoords, cyclistIndex, cyclistBearing, activeRouteId]);
 
     // 9. Zoom to specific coordinates when requested (e.g. from citizen reports panel)
     useEffect(() => {
@@ -1385,10 +1348,8 @@ export default function MapComponent({
     }, [zoomToCoords]);
 
     return (
-        <div className="map-container-wrapper" style={{ width: '100%', height: '100%', overflow: 'hidden', perspective: '1000px' }}>
-            <div ref={wazeViewportRef} style={{ width: '100%', height: '100%' }}>
-                <div ref={mapContainerRef} style={{ width: '100%', height: '100%', zIndex: 1 }}></div>
-            </div>
+        <div className="map-container-wrapper">
+            <div ref={mapContainerRef} style={{ width: '100%', height: '100%', zIndex: 1 }}></div>
             
             {/* Route Focus Mode Banner */}
             {activeRoute && (

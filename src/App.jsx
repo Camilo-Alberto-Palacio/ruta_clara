@@ -99,6 +99,7 @@ export default function App() {
     const [navigationMode, setNavigationMode] = useState('simulated'); // 'simulated' | 'gps'
     const [cyclistCoords, setCyclistCoords] = useState(null);
     const [cyclistIndex, setCyclistIndex] = useState(0);
+    const [cyclistBearing, setCyclistBearing] = useState(0);
     const [navSpeedMultiplier, setNavSpeedMultiplier] = useState(1);
     const [navStatus, setNavStatus] = useState('stopped');
     const [speedKmh, setSpeedKmh] = useState(0);
@@ -324,6 +325,21 @@ export default function App() {
             const nextIdx = cyclistIndex + 1;
             setCyclistIndex(nextIdx);
             setCyclistCoords(denseCoords[nextIdx]);
+
+            // Calculate precise travel heading along immediate road segment
+            const p1 = denseCoords[nextIdx];
+            const p2 = denseCoords[Math.min(nextIdx + 2, denseCoords.length - 1)];
+            if (p1 && p2 && (p1[0] !== p2[0] || p1[1] !== p2[1])) {
+                const lat1 = p1[0] * Math.PI / 180;
+                const lon1 = p1[1] * Math.PI / 180;
+                const lat2 = p2[0] * Math.PI / 180;
+                const lon2 = p2[1] * Math.PI / 180;
+                const dLon = lon2 - lon1;
+                const y = Math.sin(dLon) * Math.cos(lat2);
+                const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+                const brng = Math.round((Math.atan2(y, x) * 180 / Math.PI + 360) % 360);
+                setCyclistBearing(brng);
+            }
 
             // Realistic smooth speed (16-22 km/h)
             const baseSpeed = 19;
@@ -1005,6 +1021,7 @@ export default function App() {
             navigationMode={navigationMode}
             cyclistCoords={cyclistCoords}
             cyclistIndex={cyclistIndex}
+            cyclistBearing={cyclistBearing}
             activeRoute={activeRoute}
             leftDrawerOpen={leftDrawerOpen}
             rightDrawerOpen={rightDrawerOpen}
