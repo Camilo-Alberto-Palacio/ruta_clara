@@ -237,16 +237,42 @@ export default function App() {
         }));
     };
 
-    // D. 3D First Person Navigation Simulation loop
+    // D. Smooth Continuous Navigation Simulation loop
     useEffect(() => {
         const activeRoute = generatedRoutes.find(r => r.id === activeRouteId);
         if (navStatus !== 'running' || !activeRoute || navigationMode === 'gps') return;
 
+        // Generate dense interpolated points (spaced ~6m apart) for silky smooth movement
+        const rawCoords = activeRoute.coordinates;
+        const denseCoords = [];
+        const stepDeg = 6 / 111000; // ~6 meters per step
+
+        for (let i = 0; i < rawCoords.length - 1; i++) {
+            const p1 = rawCoords[i];
+            const p2 = rawCoords[i + 1];
+            denseCoords.push(p1);
+
+            const dLat = p2[0] - p1[0];
+            const dLng = p2[1] - p1[1];
+            const dist = Math.sqrt(dLat * dLat + dLng * dLng);
+
+            if (dist > stepDeg) {
+                const steps = Math.floor(dist / stepDeg);
+                for (let s = 1; s <= steps; s++) {
+                    const frac = s / (steps + 1);
+                    denseCoords.push([
+                        p1[0] + dLat * frac,
+                        p1[1] + dLng * frac
+                    ]);
+                }
+            }
+        }
+        denseCoords.push(rawCoords[rawCoords.length - 1]);
+
         let waitTicks = 0;
 
         const interval = setInterval(() => {
-            const coords = activeRoute.coordinates;
-            if (cyclistIndex >= coords.length - 1) {
+            if (cyclistIndex >= denseCoords.length - 1) {
                 // Simulation ended successfully
                 setNavStatus('stopped');
                 setIsNavigating(false);
@@ -258,7 +284,7 @@ export default function App() {
                 return;
             }
 
-            const currentPt = coords[cyclistIndex];
+            const currentPt = denseCoords[cyclistIndex];
 
             // Detect next traffic light
             const nearbyLight = trafficLights.find(light => {
@@ -266,17 +292,17 @@ export default function App() {
                     Math.pow(currentPt[0] - light.coordinates[0], 2) + 
                     Math.pow(currentPt[1] - light.coordinates[1], 2)
                 );
-                return (distDeg * 111000) <= 40;
+                return (distDeg * 111000) <= 30;
             });
 
             if (nearbyLight) {
                 setNextTrafficLight(nearbyLight);
                 if (nearbyLight.state === 'rojo') {
                     setSpeedKmh(0);
-                    setHudRecommendation('🚦 Semáforo en ROJO. Detente y espera el cambio a verde.');
+                    setHudRecommendation('🚦 Semáforo en ROJO. Esperando cambio a verde...');
                     waitTicks++;
-                    if (waitTicks < 4) {
-                        return; // pause cyclist progression
+                    if (waitTicks < 6) {
+                        return; // pause cyclist progression temporarily
                     }
                 }
             } else {
@@ -287,43 +313,44 @@ export default function App() {
 
             const nextIdx = cyclistIndex + 1;
             setCyclistIndex(nextIdx);
-            setCyclistCoords(coords[nextIdx]);
+            setCyclistCoords(denseCoords[nextIdx]);
 
-            // Simulate speed
-            const baseSpeed = 18;
-            const variance = Math.sin(nextIdx) * 3;
+            // Realistic smooth speed (16-22 km/h)
+            const baseSpeed = 19;
+            const variance = Math.sin(nextIdx * 0.2) * 2.5;
             setSpeedKmh(Math.round(baseSpeed + variance));
 
-            // Dynamic recommendation based on location risk and objects
-            const riskInfo = evaluateCoordinateRisk(
-                coords[nextIdx][0], 
-                coords[nextIdx][1], 
-                segments, 
-                simulationState, 
-                constructionZones, 
-                simulationState.showConstruction,
-                citizenReports
-            );
+            // Dynamic recommendations periodically
+            if (nextIdx % 5 === 0) {
+                const riskInfo = evaluateCoordinateRisk(
+                    denseCoords[nextIdx][0], 
+                    denseCoords[nextIdx][1], 
+                    segments, 
+                    simulationState, 
+                    constructionZones, 
+                    simulationState.showConstruction,
+                    citizenReports
+                );
 
-            // Check proximity to construction zones
-            const hasConst = constructionZones.some(zone => {
-                const distDeg = Math.sqrt(Math.pow(coords[nextIdx][0] - zone.lat, 2) + Math.pow(coords[nextIdx][1] - zone.lng, 2));
-                return (distDeg * 111000) <= zone.radius;
-            });
+                const hasConst = constructionZones.some(zone => {
+                    const distDeg = Math.sqrt(Math.pow(denseCoords[nextIdx][0] - zone.lat, 2) + Math.pow(denseCoords[nextIdx][1] - zone.lng, 2));
+                    return (distDeg * 111000) <= zone.radius;
+                });
 
-            if (hasConst) {
-                setHudRecommendation('🚧 Obras viales del IDU adelante. Disminuye la velocidad.');
-            } else if (riskInfo.level === 'Alto') {
-                setHudRecommendation('⚠️ Sector con alto índice de hurto. Evita detenerte y mantente en alerta.');
-            } else if (simulationState.weather === 'lluvia') {
-                setHudRecommendation('🌧️ Calzada resbaladiza por lluvias. Conduce con precaución.');
-            } else if (nearbyLight && nearbyLight.state === 'verde') {
-                setHudRecommendation('🟢 Cruce semaforizado en VERDE. Paso libre.');
-            } else {
-                setHudRecommendation('🚴 Calzada despejada. Sigue el rumbo por la ciclorruta.');
+                if (hasConst) {
+                    setHudRecommendation('🚧 Obras viales del IDU adelante. Precaución.');
+                } else if (riskInfo.level === 'Alto') {
+                    setHudRecommendation('⚠️ Sector con alerta de seguridad. Mantente en movimiento.');
+                } else if (simulationState.weather === 'lluvia') {
+                    setHudRecommendation('🌧️ Calzada mojada por lluvias. Conduce con cuidado.');
+                } else if (nearbyLight && nearbyLight.state === 'verde') {
+                    setHudRecommendation('🟢 Cruce con semáforo en VERDE. Paso libre.');
+                } else {
+                    setHudRecommendation('🚴 Ruta despejada. Disfruta tu recorrido.');
+                }
             }
 
-        }, 400 / navSpeedMultiplier);
+        }, 120 / navSpeedMultiplier);
 
         return () => clearInterval(interval);
     }, [navStatus, cyclistIndex, activeRouteId, navSpeedMultiplier, trafficLights, segments, simulationState, constructionZones, citizenReports, navigationMode]);

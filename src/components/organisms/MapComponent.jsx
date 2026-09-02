@@ -1209,49 +1209,22 @@ export default function MapComponent({
         const map = mapRef.current;
         if (!map) return;
 
-        // Clear existing cyclist marker
-        if (cyclistMarkerRef.current) {
-            map.removeLayer(cyclistMarkerRef.current);
-            cyclistMarkerRef.current = null;
-        }
-
         if (!isNavigating || !cyclistCoords) {
-            // Restore interactions and reset 3D styles
+            // Remove cyclist marker and restore user map interactions
+            if (cyclistMarkerRef.current) {
+                map.removeLayer(cyclistMarkerRef.current);
+                cyclistMarkerRef.current = null;
+            }
             map.dragging.enable();
             map.touchZoom.enable();
             map.doubleClickZoom.enable();
             map.scrollWheelZoom.enable();
             map.boxZoom.enable();
             map.keyboard.enable();
-
-            const paneEl = mapContainerRef.current?.querySelector('.leaflet-map-pane');
-            if (paneEl) {
-                paneEl.style.transform = '';
-                paneEl.style.transformOrigin = '';
-                paneEl.style.transition = '';
-            }
             return;
         }
 
-        // In GPS mode keep interactions enabled so user can pan/zoom freely.
-        // In simulation mode, disable dragging so camera auto-follows the cyclist.
-        if (navigationMode === 'gps') {
-            map.dragging.enable();
-            map.touchZoom.enable();
-            map.scrollWheelZoom.enable();
-            map.doubleClickZoom.enable();
-            map.boxZoom.enable();
-            map.keyboard.enable();
-        } else {
-            map.dragging.disable();
-            map.touchZoom.disable();
-            map.doubleClickZoom.disable();
-            map.scrollWheelZoom.disable();
-            map.boxZoom.disable();
-            map.keyboard.disable();
-        }
-
-        // Calculate bearing/rotation
+        // Calculate travel bearing for rotating cyclist directional indicator
         let bearing = 0;
         if (activeRoute && activeRoute.coordinates && cyclistIndex !== undefined) {
             const coords = activeRoute.coordinates;
@@ -1268,46 +1241,71 @@ export default function MapComponent({
                     const brng = Math.atan2(y, x) * 180 / Math.PI;
                     return (brng + 360) % 360;
                 };
-                bearing = getBearing(coords[cyclistIndex], coords[nextIdx]);
+                bearing = Math.round(getBearing(coords[cyclistIndex], coords[nextIdx]));
             }
         }
 
-        // Create cyclist marker
-        const cyclistIcon = L.divIcon({
-            className: 'cyclist-avatar-marker',
-            html: `
-                <div style="
-                    width: 36px;
-                    height: 36px;
-                    background: #10b981;
-                    border: 3px solid #fff;
-                    border-radius: 50%;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    color: #fff;
-                    box-shadow: 0 4px 10px rgba(16,185,129,0.8);
-                ">
-                    <i class="fa-solid fa-bicycle" style="font-size: 16px;"></i>
-                </div>
-            `,
-            iconSize: [36, 36],
-            iconAnchor: [18, 18]
-        });
+        // If marker already exists, smoothly update position and rotation without destroying/recreating layer
+        if (cyclistMarkerRef.current) {
+            cyclistMarkerRef.current.setLatLng(cyclistCoords);
+            const markerEl = cyclistMarkerRef.current.getElement();
+            if (markerEl) {
+                const innerIcon = markerEl.querySelector('.cyclist-direction-wrapper');
+                if (innerIcon) {
+                    innerIcon.style.transform = `rotate(${bearing}deg)`;
+                }
+            }
+        } else {
+            // Initial marker creation with pulse ring and smooth CSS transitions
+            const cyclistIcon = L.divIcon({
+                className: 'cyclist-avatar-marker-wrapper',
+                html: `
+                    <div class="cyclist-direction-wrapper" style="
+                        width: 44px;
+                        height: 44px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        transform: rotate(${bearing}deg);
+                        transition: transform 0.3s ease-out;
+                    ">
+                        <div style="
+                            position: relative;
+                            width: 38px;
+                            height: 38px;
+                            background: linear-gradient(135deg, #10b981, #059669);
+                            border: 3px solid #ffffff;
+                            border-radius: 50%;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            color: #ffffff;
+                            box-shadow: 0 4px 14px rgba(16, 185, 129, 0.7);
+                        ">
+                            <!-- Direction heading arrow -->
+                            <i class="fa-solid fa-location-arrow" style="font-size: 17px; transform: rotate(-45deg);"></i>
+                        </div>
+                    </div>
+                `,
+                iconSize: [44, 44],
+                iconAnchor: [22, 22]
+            });
 
-        const cyclistMarker = L.marker(cyclistCoords, { icon: cyclistIcon }).addTo(map);
-        cyclistMarkerRef.current = cyclistMarker;
+            const cyclistMarker = L.marker(cyclistCoords, { 
+                icon: cyclistIcon, 
+                zIndexOffset: 2000 
+            }).addTo(map);
 
-        // Move camera to cyclist and rotate map
-        map.setView(cyclistCoords, 17, { animate: true, duration: 0.3 });
-
-        const paneEl = mapContainerRef.current?.querySelector('.leaflet-map-pane');
-        if (paneEl) {
-            // Gentle tilt: 38° gives a subtle 3D feel without distortion
-            paneEl.style.transform = `perspective(1200px) rotateX(38deg) rotateZ(${-bearing}deg) scale(1.2)`;
-            paneEl.style.transformOrigin = '50% 50%';
-            paneEl.style.transition = 'transform 0.5s ease-out';
+            cyclistMarkerRef.current = cyclistMarker;
+            map.flyTo(cyclistCoords, 17, { duration: 0.8 });
         }
+
+        // Smooth camera follow without resetting tile matrices
+        map.panTo(cyclistCoords, { 
+            animate: true, 
+            duration: 0.35, 
+            easeLinearity: 0.25 
+        });
     }, [isNavigating, cyclistCoords, cyclistIndex, activeRouteId]);
 
     // 9. Zoom to specific coordinates when requested (e.g. from citizen reports panel)
