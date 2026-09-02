@@ -1127,27 +1127,27 @@ export default function App() {
 
     const cockpitHUD = isNavigating && activeRoute && (
         <div className="fixed inset-0 pointer-events-none z-50 flex flex-col justify-between p-4 animate-fade-in select-none">
-            {/* 1. Waze-style Top Navigation Maneuver Banner */}
-            <div className="pointer-events-auto max-w-md w-full mx-auto bg-slate-950/92 backdrop-blur-md text-white rounded-2xl shadow-2xl p-3.5 border border-slate-800 flex items-center gap-3.5 animate-slide-down">
-                <div className="w-12 h-12 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center flex-shrink-0 shadow-inner">
-                    <i className="fa-solid fa-arrow-turn-up text-2xl text-cyan-400"></i>
+            {/* 1. Top Navigation Maneuver Banner - Green and White Design */}
+            <div className="pointer-events-auto max-w-md w-full mx-auto bg-white/95 dark:bg-slate-900/95 backdrop-blur-md text-slate-900 dark:text-white rounded-3xl shadow-2xl p-3.5 border border-emerald-500/30 flex items-center gap-3.5 animate-slide-down">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-600 border border-emerald-500 flex items-center justify-center flex-shrink-0 shadow-md">
+                    <i className="fa-solid fa-arrow-turn-up text-xl text-white"></i>
                 </div>
                 <div className="flex flex-col flex-1 overflow-hidden">
                     <div className="flex items-baseline gap-1.5">
-                        <span className="text-xl font-extrabold text-white tracking-tight">
+                        <span className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
                             {Math.max(15, Math.round((1 - (cyclistIndex / Math.max(1, activeRoute.coordinates.length))) * (parseFloat(activeRoute.distanceKm) * 1000)))} m
                         </span>
-                        <span className="text-2xs text-slate-400 uppercase font-bold">hacia</span>
+                        <span className="text-2xs text-slate-500 dark:text-slate-400 uppercase font-bold">hacia</span>
                     </div>
-                    <span className="text-xs font-bold text-cyan-400 truncate">
+                    <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 truncate">
                         {destInput ? destInput.split(',')[0] : 'Destino'}
                     </span>
-                    <span className="text-[10px] text-slate-300 font-semibold mt-0.5 truncate flex items-center gap-1">
+                    <span className="text-[11px] text-slate-600 dark:text-slate-300 font-semibold mt-0.5 truncate flex items-center gap-1">
                         {hudRecommendation}
                     </span>
                 </div>
                 {nextTrafficLight && (
-                    <div className="flex flex-col items-center justify-center px-2.5 py-1 rounded-xl bg-slate-900 border border-slate-800 flex-shrink-0">
+                    <div className="flex flex-col items-center justify-center px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex-shrink-0 shadow-inner">
                         <i className="fa-solid fa-traffic-light text-base" style={{
                             color: nextTrafficLight.state === 'verde' ? '#10b981' : (nextTrafficLight.state === 'amarillo' ? '#eab308' : '#ef4444')
                         }}></i>
@@ -1158,29 +1158,29 @@ export default function App() {
                 )}
             </div>
 
-            {/* 2. Floating Circular Speedometer Widget (Lower Left - Waze style) */}
+            {/* 2. Floating Circular Speedometer Widget (Lower Left - Green & White) */}
             <div className="flex justify-between items-end w-full max-w-lg mx-auto mb-2">
-                <div className="pointer-events-auto w-16 h-16 rounded-full bg-slate-950/85 backdrop-blur-md border-2 border-cyan-500/80 shadow-xl flex flex-col items-center justify-center text-white">
-                    <span className="text-lg font-black tracking-tight leading-none text-white">{speedKmh}</span>
-                    <span className="text-[9px] font-bold text-cyan-400 uppercase leading-none mt-0.5">km/h</span>
+                <div className="pointer-events-auto w-16 h-16 rounded-full bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-2 border-emerald-500 shadow-2xl flex flex-col items-center justify-center text-slate-900 dark:text-white">
+                    <span className="text-lg font-black tracking-tight leading-none text-slate-900 dark:text-white">{speedKmh}</span>
+                    <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 uppercase leading-none mt-0.5">km/h</span>
                 </div>
 
                 {/* Quick Simulation Pause/Speed controls floating on right */}
                 {navigationMode === 'simulated' && (
-                    <div className="pointer-events-auto flex items-center gap-1.5 bg-slate-950/85 backdrop-blur-md p-1.5 rounded-2xl border border-slate-800 shadow-xl">
+                    <div className="pointer-events-auto flex items-center gap-1.5 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl">
                         <button
                             onClick={() => setNavStatus(navStatus === 'running' ? 'paused' : 'running')}
-                            className="w-8 h-8 rounded-xl bg-slate-800 text-white flex items-center justify-center cursor-pointer border-none text-xs"
+                            className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 flex items-center justify-center cursor-pointer border-none text-xs hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
                             title={navStatus === 'running' ? "Pausar" : "Reanudar"}
                         >
-                            <i className={`fa-solid ${navStatus === 'running' ? 'fa-pause text-amber-400' : 'fa-play text-emerald-400'}`}></i>
+                            <i className={`fa-solid ${navStatus === 'running' ? 'fa-pause text-amber-500' : 'fa-play text-emerald-600'}`}></i>
                         </button>
                         {[1, 2, 5].map(mult => (
                             <button
                                 key={mult}
                                 onClick={() => setNavSpeedMultiplier(mult)}
-                                className={`px-2 py-1 rounded-lg text-2xs font-extrabold cursor-pointer border-none ${
-                                    navSpeedMultiplier === mult ? 'bg-cyan-500 text-white shadow-xs' : 'bg-transparent text-slate-400 hover:text-white'
+                                className={`px-2 py-1 rounded-lg text-2xs font-extrabold cursor-pointer border-none transition-all ${
+                                    navSpeedMultiplier === mult ? 'bg-emerald-600 text-white shadow-xs' : 'bg-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                                 }`}
                             >
                                 {mult}x
@@ -1190,8 +1190,8 @@ export default function App() {
                 )}
             </div>
 
-            {/* 3. Waze-style Bottom Card (Arrival Time, Remaining Km, Audio & Exit) */}
-            <div className="pointer-events-auto max-w-md w-full mx-auto bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-3xl shadow-2xl p-4 border border-slate-200 dark:border-slate-800 flex items-center justify-between animate-slide-up text-slate-900 dark:text-white">
+            {/* 3. Bottom Card (Arrival Time, Remaining Km, Audio & Exit - Green & White) */}
+            <div className="pointer-events-auto max-w-md w-full mx-auto bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-3xl shadow-2xl p-4 border border-emerald-500/20 flex items-center justify-between animate-slide-up text-slate-900 dark:text-white">
                 <div className="flex flex-col">
                     <span className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">
                         {getEstimatedArrivalTime(activeRoute.durationMin)}
@@ -1217,7 +1217,7 @@ export default function App() {
                         }}
                         className={`w-10 h-10 rounded-full flex items-center justify-center cursor-pointer border-none transition-all ${
                             voiceEnabled 
-                                ? 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200' 
+                                ? 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200' 
                                 : 'bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400'
                         }`}
                         title={voiceEnabled ? "Silenciar voz" : "Activar voz"}
@@ -1240,13 +1240,13 @@ export default function App() {
                                 audioGuidance.speakRaw("Voz en español seleccionada.");
                             }
                         }}
-                        className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 flex items-center justify-center cursor-pointer border-none"
+                        className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 flex items-center justify-center cursor-pointer border-none transition-all"
                         title="Cambiar tipo de voz"
                     >
                         <i className="fa-solid fa-microphone-lines text-xs"></i>
                     </button>
 
-                    {/* Circular Blue Exit/Finish Button (like Waze cyan chevron/down circle) */}
+                    {/* Circular Emerald Green Exit/Finish Button */}
                     <button
                         onClick={() => {
                             setNavStatus('stopped');
@@ -1257,7 +1257,7 @@ export default function App() {
                             setNextTrafficLight(null);
                             audioGuidance.stop();
                         }}
-                        className="w-10 h-10 rounded-full bg-cyan-500 hover:bg-cyan-600 text-white flex items-center justify-center shadow-md cursor-pointer border-none transition-all ml-1"
+                        className="w-10 h-10 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center shadow-md cursor-pointer border-none transition-all ml-1"
                         title="Finalizar viaje"
                     >
                         <i className="fa-solid fa-chevron-down text-sm"></i>

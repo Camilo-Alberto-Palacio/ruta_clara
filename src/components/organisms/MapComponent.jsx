@@ -1285,24 +1285,24 @@ export default function MapComponent({
                         <!-- Pulse glow halo under vehicle -->
                         <div style="
                             position: absolute;
-                            width: 42px;
-                            height: 42px;
-                            background: rgba(6, 182, 212, 0.35);
+                            width: 44px;
+                            height: 44px;
+                            background: rgba(16, 185, 129, 0.4);
                             border-radius: 50%;
-                            filter: blur(4px);
+                            filter: blur(5px);
                         "></div>
-                        <!-- Cyan Navigation Cursor -->
+                        <!-- Emerald Green Navigation Cursor (Ruta Clara Palette) -->
                         <div style="
                             position: relative;
-                            width: 36px;
-                            height: 36px;
-                            background: linear-gradient(135deg, #06b6d4, #0891b2);
+                            width: 38px;
+                            height: 38px;
+                            background: linear-gradient(135deg, #10b981, #059669);
                             border: 3.5px solid #ffffff;
                             border-radius: 50%;
                             display: flex;
                             align-items: center;
                             justify-content: center;
-                            box-shadow: 0 6px 16px rgba(6, 182, 212, 0.8), 0 2px 6px rgba(0,0,0,0.35);
+                            box-shadow: 0 6px 18px rgba(16, 185, 129, 0.8), 0 2px 6px rgba(0,0,0,0.35);
                         ">
                             <div class="waze-arrow-icon" style="
                                 display: flex;
@@ -1311,7 +1311,7 @@ export default function MapComponent({
                                 transform: rotate(${cyclistBearing}deg);
                                 transition: transform 0.15s ease-out;
                             ">
-                                <svg viewBox="0 0 24 24" width="20" height="20" style="fill: #ffffff; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5)); transform: translateY(-1px);">
+                                <svg viewBox="0 0 24 24" width="22" height="22" style="fill: #ffffff; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5)); transform: translateY(-1px);">
                                     <path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z"/>
                                 </svg>
                             </div>
