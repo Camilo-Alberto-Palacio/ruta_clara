@@ -1006,6 +1006,9 @@ export default function App() {
             cyclistCoords={cyclistCoords}
             cyclistIndex={cyclistIndex}
             activeRoute={activeRoute}
+            leftDrawerOpen={leftDrawerOpen}
+            rightDrawerOpen={rightDrawerOpen}
+            isMobile={isMobile}
         />
     );
 

@@ -103,7 +103,10 @@ export default function MapComponent({
     isNavigating = false,
     cyclistCoords = null,
     cyclistIndex = 0,
-    activeRoute = null
+    activeRoute = null,
+    leftDrawerOpen = true,
+    rightDrawerOpen = true,
+    isMobile = false
 }) {
     // Derive the active route's coordinates for proximity filtering
     const activeRouteCoords = activeRoute ? activeRoute.coordinates : null;
@@ -897,6 +900,31 @@ export default function MapComponent({
             routeLayersRef.current.push(group);
         });
     }, [generatedRoutes, activeRouteId, simulationState, bikeSegments, mapLayers.trafficJams, citizenReports]);
+
+    // 6a. Intelligent Auto-fit active route inside the visible viewport (accounting for sidebars)
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!map || isNavigating) return;
+
+        if (activeRoute && activeRoute.coordinates && activeRoute.coordinates.length > 0) {
+            const bounds = L.latLngBounds(activeRoute.coordinates);
+            if (bounds.isValid()) {
+                // Dynamically offset bounds so no part of the route is hidden behind left/right panels
+                const leftPadding = isMobile ? 25 : (leftDrawerOpen ? 460 : 60);
+                const rightPadding = isMobile ? 25 : (rightDrawerOpen ? 370 : 60);
+                const topPadding = isMobile ? 90 : 60;
+                const bottomPadding = isMobile ? 220 : 60;
+
+                map.fitBounds(bounds, {
+                    paddingTopLeft: [leftPadding, topPadding],
+                    paddingBottomRight: [rightPadding, bottomPadding],
+                    maxZoom: 15,
+                    animate: true,
+                    duration: 0.8
+                });
+            }
+        }
+    }, [activeRouteId, leftDrawerOpen, rightDrawerOpen, isMobile, isNavigating]);
 
     // 6b. Draw global traffic jam overlay polylines and markers
     useEffect(() => {
