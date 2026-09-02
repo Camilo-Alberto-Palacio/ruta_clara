@@ -2712,3 +2712,8 @@ body.dark-mode .hover\:bg-slate-200:hover {
 :root .rounded-t-3xl {
     transition: background 0.3s ease, border-color 0.3s ease;
 }
+
+/* OpenStreetMap Dark Mode Tile Filter */
+.leaflet-tile-pane .dark-tiles {
+    filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7);
+}

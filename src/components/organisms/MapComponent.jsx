@@ -162,12 +162,10 @@ export default function MapComponent({
         mapRef.current = map;
 
         // Initial Tile Layer based on mapStyle
-        let initialUrl = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
-        let initialAttr = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
+        let initialUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+        let initialAttr = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
         
-        if (mapStyle === 'dark') {
-            initialUrl = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
-        } else if (mapStyle === 'terrain') {
+        if (mapStyle === 'terrain') {
             initialUrl = 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png';
             initialAttr = 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, SRTM | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)';
         }
@@ -176,8 +174,9 @@ export default function MapComponent({
             initialUrl,
             {
                 attribution: initialAttr,
-                subdomains: mapStyle === 'terrain' ? 'abc' : 'abcd',
-                maxZoom: mapStyle === 'terrain' ? 17 : 20
+                subdomains: mapStyle === 'terrain' ? 'abc' : ['a', 'b', 'c'],
+                maxZoom: mapStyle === 'terrain' ? 17 : 19,
+                className: mapStyle === 'dark' ? 'dark-tiles' : ''
             }
         ).addTo(map);
 
@@ -355,20 +354,19 @@ export default function MapComponent({
         map.removeLayer(tileLayerRef.current);
 
         // Add new tile layer based on mapStyle
-        let newUrl = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
-        let attr = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
+        let newUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+        let attr = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
         
-        if (mapStyle === 'dark') {
-            newUrl = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
-        } else if (mapStyle === 'terrain') {
+        if (mapStyle === 'terrain') {
             newUrl = 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png';
             attr = 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, SRTM | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)';
         }
 
         const newTiles = L.tileLayer(newUrl, {
             attribution: attr,
-            subdomains: mapStyle === 'terrain' ? 'abc' : 'abcd',
-            maxZoom: mapStyle === 'terrain' ? 17 : 20
+            subdomains: mapStyle === 'terrain' ? 'abc' : ['a', 'b', 'c'],
+            maxZoom: mapStyle === 'terrain' ? 17 : 19,
+            className: mapStyle === 'dark' ? 'dark-tiles' : ''
         }).addTo(map);
 
         tileLayerRef.current = newTiles;
