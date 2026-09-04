@@ -25,7 +25,14 @@ export default function RouteCard({
             onClick={onClick}
         >
             <div className="route-card-header">
-                <span className="route-card-title">{route.name}</span>
+                <div className="flex items-center gap-1.5 overflow-hidden">
+                    <span className="route-card-title">{route.name}</span>
+                    {route.profileTag && (
+                        <span className="text-[10px] font-black px-1.5 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
+                            {route.profileTag}
+                        </span>
+                    )}
+                </div>
                 <span className="route-card-meta">
                     {route.distanceKm} km • {hasTrafficDelay ? (
                         <>
@@ -38,6 +45,12 @@ export default function RouteCard({
                     )}
                 </span>
             </div>
+            {route.elevationProfile && (
+                <div className="flex items-center justify-between text-[11px] text-slate-500 font-semibold my-1">
+                    <span>⛰️ Desnivel: +{route.elevationProfile.gainMeters}m</span>
+                    <span>Pendiente: {route.elevationProfile.avgSlopePercent}%</span>
+                </div>
+            )}
             <div className="route-card-risk">
                 <span className="route-card-meta">Riesgo Promedio:</span>
                 <span className={riskClass}>{route.avgRiskScore} ({riskText})</span>

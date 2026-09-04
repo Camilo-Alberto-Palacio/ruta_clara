@@ -1,4 +1,6 @@
 // Risk Calculator Engine for SafeCycle Bogotá (CPTED + Historical Crime + Active Construction Zones)
+import { getTimeOfDayRiskFactor } from './weatherService';
+import { getCaravanSafetyBonus } from '../data/bikeCaravans';
 
 // Helper to calculate citizen risk impact based on user reports
 export function calcularRiesgoCiudadano(tramoId, citizenReports = [], bikeSegments = {}) {
@@ -123,8 +125,22 @@ export function calculateRisk(segment, constructionZones = [], showConstruction 
         }
     }
 
+    // K. Franja Horaria (SIEDCO Matriz de Hurtos)
+    const hourVal = segment.departureHour !== undefined ? segment.departureHour : null;
+    const timeFactor = getTimeOfDayRiskFactor(hourVal);
+    const shapTime = timeFactor.factor;
+
+    // L. Bici-Caravanas Comunitarias
+    let shapCaravan = 0.0;
+    if (startCoord) {
+        const caravanInfo = getCaravanSafetyBonus(startCoord[0], startCoord[1], hourVal);
+        if (caravanInfo.hasBonus) {
+            shapCaravan = caravanInfo.bonusValue;
+        }
+    }
+
     // Total risk score
-    let totalScore = baseValue + shapCrime + shapWeather + shapLightingTech + shapLightingPower + shapVisibility + shapGuardians + shapConstruction + shapTrafficJams + shapAccidents + citizenRisk + shapTrafficLight;
+    let totalScore = baseValue + shapCrime + shapWeather + shapLightingTech + shapLightingPower + shapVisibility + shapGuardians + shapConstruction + shapTrafficJams + shapAccidents + citizenRisk + shapTrafficLight + shapTime + shapCaravan;
     totalScore = Math.max(0.5, Math.min(9.5, totalScore));
 
     let level = 'Bajo';
@@ -145,7 +161,9 @@ export function calculateRisk(segment, constructionZones = [], showConstruction 
             'Trancones (Waze)': shapTrafficJams,
             'Accidentes (CRUE)': shapAccidents,
             'Riesgo Ciudadano': citizenRisk,
-            'Semáforo Dinámico': shapTrafficLight
+            'Semáforo Dinámico': shapTrafficLight,
+            'Franja Horaria': shapTime,
+            'Bici-Caravana': shapCaravan
         }
     };
 }
@@ -217,7 +235,15 @@ export function evaluateCoordinateRisk(lat, lng, bikeSegments, simulationState, 
         }
     }
 
-    let score = baseValue + shapCrime + shapWeather + shapLightingTech + shapLightingPower + shapVisibility + (shapCai + shapRuta) + shapConstruction + shapTrafficJams + shapAccidents + citizenRisk + shapTrafficLight;
+    // Franja Horaria & Bici-Caravana
+    const hourVal = simulationState.departureHour !== undefined ? simulationState.departureHour : null;
+    const timeFactor = getTimeOfDayRiskFactor(hourVal);
+    const shapTime = timeFactor.factor;
+
+    const caravanInfo = getCaravanSafetyBonus(lat, lng, hourVal);
+    const shapCaravan = caravanInfo.hasBonus ? caravanInfo.bonusValue : 0.0;
+
+    let score = baseValue + shapCrime + shapWeather + shapLightingTech + shapLightingPower + shapVisibility + (shapCai + shapRuta) + shapConstruction + shapTrafficJams + shapAccidents + citizenRisk + shapTrafficLight + shapTime + shapCaravan;
     score = Math.max(0.5, Math.min(9.5, score));
 
     let level = 'Bajo';

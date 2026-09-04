@@ -3,6 +3,7 @@ import FormField from '../molecules/FormField';
 import Button from '../atoms/Button';
 import Switch from '../atoms/Switch';
 import ToggleGroup from '../molecules/ToggleGroup';
+import QuickDestinationChips from '../molecules/QuickDestinationChips';
 import { localitiesMap } from '../../data/bikeSegments';
 
 export default function RoutePlanner({
@@ -18,13 +19,16 @@ export default function RoutePlanner({
     isLoading,
     onSelectOriginLocation,
     onSelectDestLocation,
-    mapLayers = { localities: true, cais: true, construction: true, accidents: true, robberies: true },
+    mapLayers = { localities: true, cais: true, construction: true, accidents: true, robberies: true, caravans: true },
     onMapLayersChange,
     showBrandLogo = false,
     localidad,
     onLocalidadChange,
     viewMode,
-    onViewModeChange
+    onViewModeChange,
+    departureHour = null,
+    onDepartureHourChange,
+    weatherData = null
 }) {
     const handleToggle = (key, val) => {
         if (onMapLayersChange) {
@@ -97,6 +101,82 @@ export default function RoutePlanner({
                 onSelectLocation={onSelectDestLocation}
                 showGpsButton={false}
             />
+
+            {/* Quick Destination Chips (Heurística 6) */}
+            <QuickDestinationChips 
+                onSelectDestination={(item) => onSelectDestLocation(item.coords, item.name)}
+                activeDestName={destInput}
+            />
+
+            {/* Time of Day & Weather Context (CU-01) */}
+            <div style={{
+                background: 'rgba(241, 245, 249, 0.65)',
+                borderRadius: '0.75rem',
+                padding: '0.55rem 0.65rem',
+                margin: '0.6rem 0 0.75rem 0',
+                border: '1px solid rgba(226, 232, 240, 0.8)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.45rem'
+            }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ fontSize: '0.72rem', fontWeight: '700', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                        <i className="fa-regular fa-clock" style={{ color: 'var(--accent-color)' }}></i> Hora de Salida:
+                    </label>
+                    <select
+                        value={departureHour === null ? '' : String(departureHour)}
+                        onChange={(e) => onDepartureHourChange && onDepartureHourChange(e.target.value === '' ? null : parseInt(e.target.value, 10))}
+                        style={{
+                            fontSize: '0.72rem',
+                            fontWeight: '600',
+                            padding: '0.2rem 0.4rem',
+                            borderRadius: '0.45rem',
+                            border: '1px solid #cbd5e1',
+                            background: '#ffffff',
+                            color: '#1e293b',
+                            cursor: 'pointer'
+                        }}
+                    >
+                        <option value="">Ahora (En vivo)</option>
+                        <option value="6">06:00 AM (Mañana)</option>
+                        <option value="12">12:00 PM (Mediodía)</option>
+                        <option value="18">18:00 PM (Hora Pico)</option>
+                        <option value="21">21:00 PM (Nocturno)</option>
+                    </select>
+                </div>
+
+                {weatherData && (
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        fontSize: '0.68rem',
+                        color: 'var(--text-secondary)',
+                        background: '#ffffff',
+                        padding: '0.25rem 0.5rem',
+                        borderRadius: '0.4rem',
+                        border: '1px solid #e2e8f0'
+                    }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                            <span>{weatherData.icon}</span>
+                            <strong style={{ color: '#0f172a' }}>{weatherData.temperature}°C</strong>
+                            <span>{weatherData.description}</span>
+                        </span>
+                        {weatherData.isRainy && (
+                            <span style={{
+                                color: '#b91c1c',
+                                fontWeight: '700',
+                                background: '#fee2e2',
+                                padding: '0.1rem 0.35rem',
+                                borderRadius: '0.25rem',
+                                fontSize: '0.62rem'
+                            }}>
+                                🌧️ +1.4 Riesgo Lluvia
+                            </span>
+                        )}
+                    </div>
+                )}
+            </div>
             
             <div className="route-buttons-row">
                 <Button
@@ -194,6 +274,12 @@ export default function RoutePlanner({
                                 <i className="fa-solid fa-people-group" style={{ marginRight: '0.4rem', width: '12px', color: 'var(--accent-color)' }}></i> Reportes Ciudadanos
                             </span>
                             <Switch id="layer-switch-citizen-reports" checked={mapLayers.citizenReports} onChange={(val) => handleToggle('citizenReports', val)} />
+                        </div>
+                        <div className="layer-switch-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                <i className="fa-solid fa-bicycle" style={{ marginRight: '0.4rem', width: '12px', color: '#10b981' }}></i> Bici-Caravanas (Pelotones)
+                            </span>
+                            <Switch id="layer-switch-caravans" checked={mapLayers.caravans} onChange={(val) => handleToggle('caravans', val)} />
                         </div>
                     </div>
                 )}

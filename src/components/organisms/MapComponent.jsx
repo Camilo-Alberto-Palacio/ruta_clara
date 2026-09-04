@@ -4,6 +4,7 @@ import { localitiesMap } from '../../data/bikeSegments';
 import { caiPoints } from '../../data/caiPoints';
 import { robberyReports } from '../../data/robberyReports';
 import { accidentPoints } from '../../data/accidentPoints';
+import { bikeCaravans } from '../../data/bikeCaravans';
 import { calculateRisk, evaluateCoordinateRisk } from '../../utils/riskCalculator';
 
 // Helper to check if a point is inside a polygon (Ray-Casting Algorithm)
@@ -21,7 +22,7 @@ function isPointInPolygon(point, polygonCoords) {
 }
 
 // Helper: check if a [lat, lng] point is within thresholdMeters of any segment in routeCoords
-function isNearRoute(lat, lng, routeCoords, thresholdMeters = 450) {
+function isNearRoute(lat, lng, routeCoords, thresholdMeters = 800) {
     if (!routeCoords || routeCoords.length === 0) return false;
     const thresholdDeg = thresholdMeters / 111000;
     const thresholdSq = thresholdDeg * thresholdDeg;
@@ -34,7 +35,7 @@ function isNearRoute(lat, lng, routeCoords, thresholdMeters = 450) {
 }
 
 // Helper: determine if a marker should be rendered based on active route OR map zoom level
-function shouldShowMarker(lat, lng, routeCoords, currentZoom, minZoomWithoutRoute = 13, thresholdMeters = 450) {
+function shouldShowMarker(lat, lng, routeCoords, currentZoom, minZoomWithoutRoute = 11, thresholdMeters = 800) {
     if (routeCoords && routeCoords.length > 0) {
         return isNearRoute(lat, lng, routeCoords, thresholdMeters);
     }
@@ -125,6 +126,7 @@ export default function MapComponent({
     const accidentLayersRef = useRef([]);
     const trafficJamLayersRef = useRef([]);
     const citizenReportLayersRef = useRef([]);
+    const caravanLayersRef = useRef([]);
     const trafficLightLayersRef = useRef([]);
     const cyclistMarkerRef = useRef(null);
     const tileLayerRef = useRef(null);
@@ -612,7 +614,7 @@ export default function MapComponent({
         if (!mapLayers.cais) return;
 
         caiPoints.forEach(cai => {
-            if (!shouldShowMarker(cai.lat, cai.lng, activeRouteCoordsRef.current, currentZoom, 13, 300)) return;
+            if (!shouldShowMarker(cai.lat, cai.lng, activeRouteCoords, currentZoom, 11, 800)) return;
 
             const marker = L.marker([cai.lat, cai.lng], {
                 icon: L.divIcon({
@@ -676,7 +678,7 @@ export default function MapComponent({
         if (!mapLayers.robberies) return;
 
         robberyReports.forEach(report => {
-            if (!shouldShowMarker(report.lat, report.lng, activeRouteCoordsRef.current, currentZoom, 14, 150)) return;
+            if (!shouldShowMarker(report.lat, report.lng, activeRouteCoords, currentZoom, 11, 800)) return;
 
             const marker = L.marker([report.lat, report.lng], {
                 icon: L.divIcon({
@@ -739,7 +741,7 @@ export default function MapComponent({
         if (!mapLayers.accidents) return;
 
         accidentPoints.forEach(acc => {
-            if (!shouldShowMarker(acc.lat, acc.lng, activeRouteCoordsRef.current, currentZoom, 14, 150)) return;
+            if (!shouldShowMarker(acc.lat, acc.lng, activeRouteCoords, currentZoom, 11, 800)) return;
 
             const marker = L.marker([acc.lat, acc.lng], {
                 icon: L.divIcon({
@@ -1030,7 +1032,7 @@ export default function MapComponent({
             const coords = report.properties.coordenadas; // [lat, lng]
             if (!coords) return;
 
-            if (!shouldShowMarker(coords[0], coords[1], activeRouteCoordsRef.current, currentZoom, 14, 150)) return;
+            if (!shouldShowMarker(coords[0], coords[1], activeRouteCoords, currentZoom, 11, 800)) return;
 
             const tipo = report.properties.tipo_novedad;
             const votos = report.properties.numero_votos;
@@ -1079,12 +1081,14 @@ export default function MapComponent({
 
             // Create flat popup element
             const div = document.createElement('div');
-            div.style.minWidth = '180px';
+            div.style.minWidth = '190px';
             div.innerHTML = `
                 <div style="font-family: var(--font-body); font-size: 0.78rem;">
                     <h4 style="font-family: var(--font-heading); font-size: 0.85rem; font-weight: 700; margin-bottom: 0.35rem; color: ${color}; display: flex; align-items: center; gap: 0.35rem;">
                         <i class="fa-solid ${icon}"></i> ${tipo.split('/')[0].trim()}
                     </h4>
+                    ${report.properties.foto ? `<img src="${report.properties.foto}" style="width: 100%; max-height: 110px; object-fit: cover; border-radius: 8px; margin-bottom: 0.4rem; border: 1px solid #e2e8f0;" alt="Evidencia" />` : ''}
+                    ${report.properties.descripcion ? `<p style="margin: 0 0 0.35rem 0; font-style: italic; color: var(--text-primary); font-size: 0.72rem;">"${report.properties.descripcion}"</p>` : ''}
                     <p style="margin: 0 0 0.3rem 0; color: var(--text-secondary);"><b>Votos:</b> <span class="vote-count" style="font-weight: 700; color: #f59e0b;">${votos}</span></p>
                     <p style="margin: 0 0 0.3rem 0; color: var(--text-secondary); font-size: 0.72rem;"><b>Reportado:</b> ${fecha}</p>
                     <p style="margin: 0 0 0.4rem 0; color: var(--text-secondary); font-size: 0.72rem;"><b>Estado:</b> <span style="text-transform: capitalize; color: #10b981; font-weight: 600;">${estado}</span></p>
@@ -1112,6 +1116,66 @@ export default function MapComponent({
             citizenReportLayersRef.current.push(marker);
         });
     }, [citizenReports, mapLayers.citizenReports, activeRoute, currentZoom]);
+
+    // 6b. Bici-Caravanas Comunitarias Layer
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!map) return;
+
+        caravanLayersRef.current.forEach(l => map.removeLayer(l));
+        caravanLayersRef.current = [];
+
+        if (mapLayers.caravans === false) return;
+
+        bikeCaravans.forEach(caravan => {
+            // Polilínea de la caravana
+            const poly = L.polyline(caravan.coordinates, {
+                color: caravan.color,
+                weight: 4,
+                dashArray: '8, 8',
+                opacity: 0.85
+            }).addTo(map);
+
+            poly.bindTooltip(`<strong>🚲 ${caravan.name}</strong><br/>Salida: ${caravan.meetingPoint.departureTime}`, { sticky: true });
+            caravanLayersRef.current.push(poly);
+
+            // Marcador de punto de encuentro
+            const marker = L.marker([caravan.meetingPoint.lat, caravan.meetingPoint.lng], {
+                icon: L.divIcon({
+                    className: 'caravan-meeting-icon',
+                    html: `
+                        <div style="
+                            width: 26px; height: 26px;
+                            background: ${caravan.color};
+                            border: 2px solid #ffffff;
+                            border-radius: 50%;
+                            display: flex; align-items: center; justify-content: center;
+                            color: #ffffff; font-size: 11px;
+                            box-shadow: 0 4px 10px rgba(0,0,0,0.35);
+                        ">
+                            <i class="fa-solid fa-bicycle"></i>
+                        </div>
+                    `,
+                    iconSize: [26, 26],
+                    iconAnchor: [13, 13]
+                })
+            }).addTo(map);
+
+            marker.bindPopup(`
+                <div style="font-family: var(--font-body); font-size: 0.78rem; min-width: 190px;">
+                    <h4 style="color: ${caravan.color}; margin: 0 0 0.35rem 0; font-weight: 800;">
+                        <i class="fa-solid fa-users"></i> ${caravan.name}
+                    </h4>
+                    <p style="margin: 0 0 0.25rem 0;"><strong>Encuentro:</strong> ${caravan.meetingPoint.name}</p>
+                    <p style="margin: 0 0 0.25rem 0;"><strong>Salida:</strong> ${caravan.meetingPoint.departureTime} (Reunión: ${caravan.meetingPoint.assemblyTime})</p>
+                    <p style="margin: 0 0 0.25rem 0; color: #10b981; font-weight: bold;"><strong>Bono Protector:</strong> ${caravan.riskReductionFactor} Riesgo</p>
+                    <p style="margin: 0; font-size: 0.72rem; color: var(--text-secondary);">${caravan.description}</p>
+                </div>
+            `);
+
+            caravanLayersRef.current.push(marker);
+        });
+    }, [mapLayers.caravans]);
 
     // 7. Update segment polyline colors and interaction (For audit mode)
     useEffect(() => {
@@ -1178,7 +1242,7 @@ export default function MapComponent({
         if (mapLayers.trafficLights === false) return;
 
         trafficLights.forEach(light => {
-            if (!shouldShowMarker(light.coordinates[0], light.coordinates[1], activeRouteCoordsRef.current, currentZoom, 15, 120)) return;
+            if (!shouldShowMarker(light.coordinates[0], light.coordinates[1], activeRouteCoords, currentZoom, 11, 800)) return;
 
             const lightColor = light.state === 'verde' ? '#10b981' : (light.state === 'amarillo' ? '#eab308' : '#ef4444');
 

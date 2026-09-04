@@ -111,7 +111,7 @@ class AudioGuidanceService {
         if (!this.enabled || !this.synth || !text) return;
 
         const cleanText = text
-            .replace(/[🚦🚧⚠️🌧️🚴🟢🛑🔊🔇✨🎯📢]/gu, '')
+            .replace(/[\p{Extended_Pictographic}\uFE0F]/gu, '')
             .replace(/\s+/g, ' ')
             .trim();
 

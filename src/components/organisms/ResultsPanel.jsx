@@ -1,5 +1,6 @@
 import React from 'react';
 import RouteCard from '../molecules/RouteCard';
+import ElevationChart from '../molecules/ElevationChart';
 
 export default function ResultsPanel({
     prediction,
@@ -98,6 +99,11 @@ export default function ResultsPanel({
                                     />
                                 ))}
                             </div>
+
+                            {/* Altimetría y perfil de la ruta activa */}
+                            {generatedRoutes.find(r => r.id === activeRouteId)?.elevationProfile && (
+                                <ElevationChart profile={generatedRoutes.find(r => r.id === activeRouteId).elevationProfile} />
+                            )}
 
                             {/* Secondary: simulation link */}
                             <button

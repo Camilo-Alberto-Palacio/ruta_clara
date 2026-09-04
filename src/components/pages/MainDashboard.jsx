@@ -21,6 +21,7 @@ import {
     calcularRiesgoCiudadano
 } from '../../utils/riskCalculator';
 import CitizenSciencePanel from '../organisms/CitizenSciencePanel';
+import { emitToast } from '../../utils/toastService';
 
 export default function MainDashboard() {
     // 1. Localities and View Modes
@@ -257,7 +258,7 @@ export default function MainDashboard() {
 
         if (updated) {
             setCitizenReports(updatedReports);
-            alert("Se detectó un reporte idéntico a menos de 50 metros. Se ha sumado tu respaldo (voto) al reporte existente en lugar de duplicarlo.");
+            emitToast("Se detectó un reporte idéntico a menos de 50 metros. Se sumó tu respaldo.", "info");
         } else {
             const newReport = {
                 type: "Feature",
@@ -277,7 +278,7 @@ export default function MainDashboard() {
                 }
             };
             setCitizenReports(prev => [...prev, newReport]);
-            alert("Reporte creado con éxito.");
+            emitToast("Reporte ciudadano publicado con éxito en el mapa.", "success");
         }
 
         setIsReporting(false);
@@ -387,7 +388,7 @@ export default function MainDashboard() {
     // 13. Trigger route plotting calculations
     const handleCalculateRoute = async () => {
         if (!originInput.trim() || !destInput.trim()) {
-            alert("Por favor, ingresa origen y destino (escribiendo o haciendo clic en el mapa).");
+            emitToast("Por favor, ingresa origen y destino (escribiendo o haciendo clic en el mapa).", "warning");
             return;
         }
 
@@ -406,7 +407,7 @@ export default function MainDashboard() {
                     originCoord = { lat: result.lat, lng: result.lng };
                     setOriginInput(result.name);
                 } else {
-                    alert(`No se pudo encontrar la ubicación de origen: "${originInput}"`);
+                    emitToast(`No se pudo encontrar la ubicación de origen: "${originInput}"`, "error");
                     setIsLoading(false);
                     return;
                 }
@@ -424,7 +425,7 @@ export default function MainDashboard() {
                     destCoord = { lat: result.lat, lng: result.lng };
                     setDestInput(result.name);
                 } else {
-                    alert(`No se pudo encontrar la ubicación de destino: "${destInput}"`);
+                    emitToast(`No se pudo encontrar la ubicación de destino: "${destInput}"`, "error");
                     setIsLoading(false);
                     return;
                 }
@@ -436,7 +437,7 @@ export default function MainDashboard() {
         // Fetch OSRM routes
         const routesData = await fetchOSRMAlternatives(originCoord, destCoord);
         if (routesData.length === 0) {
-            alert("No se pudieron encontrar rutas para los puntos ingresados.");
+            emitToast("No se pudieron encontrar rutas para los puntos ingresados.", "error");
             setIsLoading(false);
             return;
         }

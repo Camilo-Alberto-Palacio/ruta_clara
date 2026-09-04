@@ -18,6 +18,19 @@ import { accidentPoints } from './data/accidentPoints';
 import { caiPoints } from './data/caiPoints';
 import { fetchBogotaTrafficLights } from './utils/trafficLightsService';
 import { audioGuidance } from './utils/audioGuidanceService';
+import { fetchBogotaWeather } from './utils/weatherService';
+import { calculateRouteElevationProfile } from './utils/elevationService';
+import SafeHavenEmergencyModal from './components/molecules/SafeHavenEmergencyModal';
+import InterventionSimulatorModal from './components/organisms/InterventionSimulatorModal';
+import ModelValidationModal from './components/organisms/ModelValidationModal';
+import PriorityHeatmapPanel from './components/organisms/PriorityHeatmapPanel';
+import CptedAuditModal from './components/organisms/CptedAuditModal';
+import ToastContainer from './components/atoms/ToastContainer';
+import MobileBottomDock from './components/molecules/MobileBottomDock';
+import QuickDestinationChips from './components/molecules/QuickDestinationChips';
+import OnboardingTourModal from './components/molecules/OnboardingTourModal';
+import KeyboardShortcutsModal from './components/molecules/KeyboardShortcutsModal';
+import { emitToast } from './utils/toastService';
 import { 
     calculateRisk, 
     getRecommendations, 
@@ -53,19 +66,62 @@ export default function App() {
         accidents: false
     });
 
-    // Map Layers Visibility State (Clean minimalist defaults)
+    // Map Layers Visibility State (All layers active for complete data richness)
     const [mapLayers, setMapLayers] = useState({
         localities: true,
-        cais: false,
+        cais: true,
         construction: true,
-        accidents: false,
-        robberies: false,
-        trafficJams: false,
+        accidents: true,
+        robberies: true,
+        trafficJams: true,
         citizenReports: true,
-        trafficLights: true
+        trafficLights: true,
+        caravans: true
     });
 
     const [desktopLayersOpen, setDesktopLayersOpen] = useState(false);
+
+    // Weather & Time of Day State
+    const [weatherData, setWeatherData] = useState(null);
+    const [departureHour, setDepartureHour] = useState(null); // null = "Ahora"
+
+    // Scientific & Emergency Modals State
+    const [isSafeHavenOpen, setIsSafeHavenOpen] = useState(false);
+    const [isInterventionModalOpen, setIsInterventionModalOpen] = useState(false);
+    const [isModelValidationOpen, setIsModelValidationOpen] = useState(false);
+    const [isPriorityHeatmapOpen, setIsPriorityHeatmapOpen] = useState(false);
+    const [isCptedAuditOpen, setIsCptedAuditOpen] = useState(false);
+
+    // Usability, Toasts, Zen Mode & Onboarding State (Heurística 1, 3, 7, 8, 10)
+    const [toasts, setToasts] = useState([]);
+    const [isZenMode, setIsZenMode] = useState(false);
+    const [isOnboardingOpen, setIsOnboardingOpen] = useState(() => {
+        return typeof window !== 'undefined' && !localStorage.getItem('rutaclara_onboarding_dismissed');
+    });
+    const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
+
+    const showToast = (message, type = 'info') => {
+        const id = 'toast_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
+        setToasts(prev => [...prev, { id, message, type }]);
+        setTimeout(() => {
+            setToasts(prev => prev.filter(t => t.id !== id));
+        }, 3600);
+    };
+
+    const handleDismissToast = (id) => {
+        setToasts(prev => prev.filter(t => t.id !== id));
+    };
+
+    // Escucha de eventos desacoplados de toast
+    useEffect(() => {
+        const handleToastEvent = (e) => {
+            if (e.detail && e.detail.message) {
+                showToast(e.detail.message, e.detail.type || 'info');
+            }
+        };
+        window.addEventListener('rutaclara-toast', handleToastEvent);
+        return () => window.removeEventListener('rutaclara-toast', handleToastEvent);
+    }, []);
 
     // Sidebar active tab (desktop left panel content)
     const [activeTab, setActiveTab] = useState('routes');
@@ -95,6 +151,16 @@ export default function App() {
 
     useEffect(() => {
         loadTrafficLightsData(false);
+
+        // Cargar clima real de Bogotá
+        fetchBogotaWeather().then(w => {
+            if (w) {
+                setWeatherData(w);
+                if (w.condition === 'lluvia') {
+                    setSimulationState(prev => ({ ...prev, weather: 'lluvia' }));
+                }
+            }
+        });
     }, []);
 
     // 3D Navigation Simulator State
@@ -172,6 +238,57 @@ export default function App() {
             setDarkMode(false);
         }
     }, [mapStyle]);
+
+    // Atajos de teclado globales (Heurística 3 y 7: Control del usuario y flexibilidad)
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+            const isTyping = activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select';
+
+            if (e.key === 'Escape') {
+                if (isShortcutsOpen) { setIsShortcutsOpen(false); return; }
+                if (isOnboardingOpen) { setIsOnboardingOpen(false); return; }
+                if (isSafeHavenOpen) { setIsSafeHavenOpen(false); return; }
+                if (isInterventionModalOpen) { setIsInterventionModalOpen(false); return; }
+                if (isModelValidationOpen) { setIsModelValidationOpen(false); return; }
+                if (isPriorityHeatmapOpen) { setIsPriorityHeatmapOpen(false); return; }
+                if (isCptedAuditOpen) { setIsCptedAuditOpen(false); return; }
+                if (isZenMode) { setIsZenMode(false); return; }
+                if (selectingLocationMode) { setSelectingLocationMode(null); return; }
+                return;
+            }
+
+            if (isTyping) return;
+
+            if (e.key === 'z' || e.key === 'Z') {
+                e.preventDefault();
+                setIsZenMode(prev => {
+                    const next = !prev;
+                    showToast(next ? '🧘 Modo Zen activado (Mapa a pantalla completa)' : 'Modo estándar restaurado', 'info');
+                    return next;
+                });
+            } else if (e.key === '?' || (e.shiftKey && e.key === '/')) {
+                e.preventDefault();
+                setIsShortcutsOpen(prev => !prev);
+            } else if (e.key === ' ' && isNavigating && navigationMode === 'simulated') {
+                e.preventDefault();
+                setNavStatus(prev => {
+                    const next = prev === 'running' ? 'paused' : 'running';
+                    showToast(next === 'running' ? '▶️ Navegación reanudada' : '⏸️ Navegación pausada', 'info');
+                    return next;
+                });
+            } else if (['1', '2', '3'].includes(e.key) && generatedRoutes.length > 0) {
+                const targetIdx = parseInt(e.key, 10) - 1;
+                if (generatedRoutes[targetIdx]) {
+                    setActiveRouteId(generatedRoutes[targetIdx].id);
+                    showToast(`Alternativa seleccionada: ${generatedRoutes[targetIdx].name}`, 'info');
+                }
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [isShortcutsOpen, isOnboardingOpen, isSafeHavenOpen, isInterventionModalOpen, isModelValidationOpen, isPriorityHeatmapOpen, isCptedAuditOpen, isZenMode, selectingLocationMode, isNavigating, navigationMode, generatedRoutes]);
 
     // A. Auto-cycle Traffic Lights
     useEffect(() => {
@@ -293,7 +410,7 @@ export default function App() {
                 setSpeedKmh(0);
                 setNextTrafficLight(null);
                 audioGuidance.speakRaw("¡Felicidades! Has llegado a tu destino.", true);
-                alert("¡Has llegado a tu destino de forma segura!");
+                showToast("🎉 ¡Has llegado a tu destino de forma segura!", "success");
                 return;
             }
 
@@ -448,7 +565,7 @@ export default function App() {
         if (navStatus !== 'running' || navigationMode !== 'gps') return;
 
         if (!navigator.geolocation) {
-            alert("La geolocalización no está soportada por tu navegador. Cambiando a Simulación.");
+            showToast("La geolocalización no está soportada. Cambiando a Simulación.", "warning");
             setNavigationMode('simulated');
             return;
         }
@@ -682,14 +799,19 @@ export default function App() {
         }
     };
 
-    const handleSubmitReport = () => {
-        if (!reportingCoords) return;
+    const handleSubmitReport = (customData = null) => {
+        const coords = (customData && customData.coordenadas) ? customData.coordenadas : reportingCoords;
+        if (!coords) return;
+
+        const type = (customData && customData.tipo_novedad) ? customData.tipo_novedad : reportingType;
+        const description = (customData && customData.descripcion) ? customData.descripcion : '';
+        const foto = (customData && customData.foto) ? customData.foto : null;
 
         let updated = false;
         const updatedReports = citizenReports.map(report => {
-            if (report.properties.estado === 'activo' && report.properties.tipo_novedad === reportingType) {
+            if (report.properties.estado === 'activo' && report.properties.tipo_novedad === type) {
                 const reportCoords = report.properties.coordenadas;
-                const distDeg = Math.sqrt(Math.pow(reportCoords[0] - reportingCoords[0], 2) + Math.pow(reportCoords[1] - reportingCoords[1], 2));
+                const distDeg = Math.sqrt(Math.pow(reportCoords[0] - coords[0], 2) + Math.pow(reportCoords[1] - coords[1], 2));
                 const distMeters = distDeg * 111000;
                 
                 if (distMeters <= 50) {
@@ -698,7 +820,9 @@ export default function App() {
                         ...report,
                         properties: {
                             ...report.properties,
-                            numero_votos: report.properties.numero_votos + 1
+                            numero_votos: report.properties.numero_votos + 1,
+                            foto: foto || report.properties.foto,
+                            descripcion: description || report.properties.descripcion
                         }
                     };
                 }
@@ -708,32 +832,58 @@ export default function App() {
 
         if (updated) {
             setCitizenReports(updatedReports);
-            alert("Se detectó un reporte idéntico a menos de 50 metros. Se ha sumado tu respaldo (voto) al reporte existente en lugar de duplicarlo.");
+            showToast("Se detectó un reporte idéntico a menos de 50m. Se sumó tu respaldo (voto) y evidencia.", "info");
         } else {
             const newReport = {
                 type: "Feature",
                 id: `report_${Date.now()}`,
                 geometry: {
                     type: "Point",
-                    coordinates: [reportingCoords[1], reportingCoords[0]]
+                    coordinates: [coords[1], coords[0]]
                 },
                 properties: {
                     id: `report_${Date.now()}`,
-                    coordenadas: [reportingCoords[0], reportingCoords[1]],
-                    tipo_novedad: reportingType,
+                    coordenadas: [coords[0], coords[1]],
+                    tipo_novedad: type,
+                    descripcion: description,
+                    foto: foto,
                     fecha_creacion: new Date().toISOString().split('T')[0],
                     numero_votos: 1,
+                    resolvedVotes: 0,
                     estado: 'activo',
-                    localidad: localidad === 'usme' ? 'Usme' : 'Rafael Uribe Uribe'
+                    localidad: localitiesMap[localidad]?.name || (localidad === 'usme' ? 'Usme' : 'Rafael Uribe Uribe')
                 }
             };
             setCitizenReports(prev => [...prev, newReport]);
-            alert("Reporte creado con éxito.");
+            showToast("Reporte ciudadano publicado con éxito con evidencia comunitaria.", "success");
         }
 
         setIsReporting(false);
         setReportingCoords(null);
         setIsSelectingCoords(false);
+    };
+
+    const handleResolveReport = (reportId) => {
+        setCitizenReports(prev => prev.map(report => {
+            if (report.properties.id === reportId) {
+                const newVotes = (report.properties.resolvedVotes || 0) + 1;
+                const isNowResolved = newVotes >= 2;
+                if (isNowResolved) {
+                    showToast("¡Excelente! La comunidad confirmó que este obstáculo fue resuelto.", "success");
+                } else {
+                    showToast("Gracias por tu confirmación. Se sumó tu voto a este reporte.", "info");
+                }
+                return {
+                    ...report,
+                    properties: {
+                        ...report.properties,
+                        resolvedVotes: newVotes,
+                        estado: isNowResolved ? 'resuelto' : 'activo'
+                    }
+                };
+            }
+            return report;
+        }));
     };
 
     const handleCancelReport = () => {
@@ -769,7 +919,7 @@ export default function App() {
         });
     };
 
-    // Recalculate routes risk & cost in-place when citizen reports are updated
+    // Recalculate routes risk & cost in-place when citizen reports or simulation conditions (e.g. departureHour, weather) change
     useEffect(() => {
         if (generatedRoutes.length > 0) {
             setGeneratedRoutes(prevRoutes => {
@@ -799,7 +949,7 @@ export default function App() {
                 });
             });
         }
-    }, [citizenReports]);
+    }, [citizenReports, simulationState]);
 
     // 11. Nominatim Geocoding Fetcher
     const geocodeAddress = async (addressText) => {
@@ -838,7 +988,7 @@ export default function App() {
     // 13. Trigger route plotting calculations
     const handleCalculateRoute = async () => {
         if (!originInput.trim() || !destInput.trim()) {
-            alert("Por favor, ingresa origen y destino (escribiendo o haciendo clic en el mapa).");
+            showToast("Por favor, ingresa origen y destino (escribiendo o tocando el mapa).", "warning");
             return;
         }
 
@@ -857,7 +1007,7 @@ export default function App() {
                     originCoord = { lat: result.lat, lng: result.lng };
                     setOriginInput(result.name);
                 } else {
-                    alert(`No se pudo encontrar la ubicación de origen: "${originInput}"`);
+                    showToast(`No se pudo encontrar la ubicación de origen: "${originInput}"`, "error");
                     setIsLoading(false);
                     return;
                 }
@@ -875,7 +1025,7 @@ export default function App() {
                     destCoord = { lat: result.lat, lng: result.lng };
                     setDestInput(result.name);
                 } else {
-                    alert(`No se pudo encontrar la ubicación de destino: "${destInput}"`);
+                    showToast(`No se pudo encontrar la ubicación de destino: "${destInput}"`, "error");
                     setIsLoading(false);
                     return;
                 }
@@ -887,7 +1037,7 @@ export default function App() {
         // Fetch OSRM routes
         const routesData = await fetchOSRMAlternatives(originCoord, destCoord);
         if (routesData.length === 0) {
-            alert("No se pudieron encontrar rutas para los puntos ingresados.");
+            showToast("No se pudieron encontrar rutas para los puntos ingresados.", "error");
             setIsLoading(false);
             return;
         }
@@ -915,10 +1065,29 @@ export default function App() {
             const jamsOnRoute = detectTrafficJamsOnRoute(leafletCoords, trafficJams);
             const totalDelayMinutes = jamsOnRoute.reduce((sum, j) => sum + j.delayMinutes, 0);
             const baseDurationMin = Math.round(route.duration / 60);
+
+            // Perfil de elevación y altimetría
+            const elevationProfile = calculateRouteElevationProfile(leafletCoords);
+
+            // Asignación de perfiles multicriterio (CU-02)
+            let profileTag = '⏱️ Exprés';
+            let routeName = `Ruta ${idx + 1}`;
+            if (idx === 0) {
+                profileTag = '🛡️ Blindada';
+                routeName = 'Ruta 1 (Más Segura)';
+            } else if (idx === 1) {
+                profileTag = '⛰️ Menos Pendiente';
+                routeName = 'Ruta 2 (Fácil Pedaleo)';
+            } else {
+                profileTag = '⏱️ Exprés';
+                routeName = `Ruta ${idx + 1} (Directa)`;
+            }
             
             return {
                 id: `route_${idx}`,
-                name: `Ruta ${idx + 1}`,
+                name: routeName,
+                profileTag,
+                elevationProfile,
                 distanceKm: (route.distance / 1000).toFixed(1),
                 durationMin: String(baseDurationMin),
                 durationWithTraffic: String(baseDurationMin + totalDelayMinutes),
@@ -937,6 +1106,76 @@ export default function App() {
 
         // Mobile Bottom Sheet UX: Expand when routes are plotted
         setIsBottomSheetExpanded(true);
+    };
+
+    // Handler para escape y navegación inmediata a CAI (CU-03)
+    const handleNavigateToHaven = async (targetCai) => {
+        if (!targetCai) return;
+
+        const originCoord = cyclistCoords 
+            ? { lat: cyclistCoords[0], lng: cyclistCoords[1] }
+            : (routePoints.origin || { lat: 4.5317, lng: -74.1166 });
+
+        const destCoord = { lat: targetCai.lat, lng: targetCai.lng };
+
+        setOriginInput(`${originCoord.lat.toFixed(4)}, ${originCoord.lng.toFixed(4)}`);
+        setDestInput(`Refugio: ${targetCai.name}`);
+        setRoutePoints({ origin: originCoord, destination: destCoord });
+
+        const routesData = await fetchOSRMAlternatives(originCoord, destCoord);
+        if (routesData && routesData.length > 0) {
+            const leafletCoords = routesData[0].geometry.coordinates.map(pt => [pt[1], pt[0]]);
+            const elevationProfile = calculateRouteElevationProfile(leafletCoords);
+            const escapeRoute = {
+                id: 'escape_route_cai',
+                name: `🚨 Escape hacia ${targetCai.name}`,
+                profileTag: '🛡️ Refugio CAI',
+                elevationProfile,
+                distanceKm: (routesData[0].distance / 1000).toFixed(1),
+                durationMin: String(Math.round(routesData[0].duration / 60)),
+                durationWithTraffic: String(Math.round(routesData[0].duration / 60)),
+                coordinates: leafletCoords,
+                avgRiskScore: '1.8',
+                maxRiskLevel: 'Bajo',
+                trafficJamsOnRoute: [],
+                totalDelayMinutes: 0,
+                cost: '10.0'
+            };
+            setGeneratedRoutes([escapeRoute]);
+            setActiveRouteId('escape_route_cai');
+            setIsNavigating(true);
+            setNavStatus('running');
+            setCyclistIndex(0);
+            setCyclistCoords(leafletCoords[0]);
+            setIsBottomSheetExpanded(true);
+        }
+    };
+
+    // Handler para guardar auditoría CPTED de campo (CU-09)
+    const handleSaveCptedAudit = (auditData) => {
+        const auditId = `cpted_${Date.now()}`;
+        const coords = cyclistCoords ? [cyclistCoords] : [[4.5317, -74.1166]];
+        const newSeg = {
+            id: auditId,
+            name: `${auditData.segmentName} (Auditado CPTED ${auditData.cptedIndex}%)`,
+            localidad: localitiesMap[localidad]?.name || 'Bogotá',
+            upz: 'UPZ Auditada',
+            baselineCrime: auditData.cptedIndex > 65 ? 'Bajo' : (auditData.cptedIndex > 40 ? 'Medio' : 'Alto'),
+            coordinates: coords,
+            lightingType: auditData.ratings.lightingScore >= 4 ? 'LED' : 'Sodio',
+            watts: auditData.ratings.lightingScore * 40,
+            weather: 'seco',
+            visibility: auditData.ratings.surveillanceScore >= 3 ? 3 : 1,
+            guardianCai: auditData.ratings.surveillanceScore >= 4,
+            guardianRuta: false
+        };
+
+        setSegments(prev => ({
+            ...prev,
+            [auditId]: newSeg
+        }));
+        setSelectedSegmentId(auditId);
+        showToast("¡Auditoría CPTED guardada y registrada con éxito en el mapa!", "success");
     };
 
     // 14. Clear route overlays
@@ -1068,6 +1307,14 @@ export default function App() {
         />
     );
 
+    const handleDepartureHourChange = (newHour) => {
+        setDepartureHour(newHour);
+        setSimulationState(prev => ({
+            ...prev,
+            departureHour: newHour
+        }));
+    };
+
     const routePlannerComponent = (
         <RoutePlanner
             originInput={originInput}
@@ -1089,6 +1336,9 @@ export default function App() {
             onLocalidadChange={handleLocalidadChange}
             viewMode={viewMode}
             onViewModeChange={setViewMode}
+            departureHour={departureHour}
+            onDepartureHourChange={handleDepartureHourChange}
+            weatherData={weatherData}
         />
     );
 
@@ -1136,6 +1386,8 @@ export default function App() {
             onSubmitReport={handleSubmitReport}
             onCancelReport={handleCancelReport}
             onZoomToReport={handleZoomToReport}
+            onUpvoteReport={handleUpvoteReport}
+            onResolveReport={handleResolveReport}
         />
     );
 
@@ -1330,17 +1582,26 @@ export default function App() {
 
             {/* 2. Floating Top Planner Card - hidden during navigation */}
             {isMobile && !isNavigating && !generatedRoutes.length && (
-                <div 
-                    onClick={() => setIsMobileSearchOpen(true)}
-                    className="absolute top-4 left-4 right-4 z-10 backdrop-blur-md p-3.5 rounded-2xl shadow-lg flex items-center gap-3 max-w-[calc(100vw-2rem)] mx-auto cursor-pointer transition-all"
-                    style={{
-                        background: 'var(--bg-surface)',
-                        border: '1px solid var(--border-surface)',
-                        color: 'var(--text-on-surface)'
-                    }}
-                >
-                    <i className="fa-solid fa-magnifying-glass text-emerald-600 text-base"></i>
-                    <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>¿A dónde quieres ir hoy? (Planificar ruta)</span>
+                <div className="absolute top-4 left-4 right-4 z-10 flex items-center gap-2 max-w-[calc(100vw-2rem)] mx-auto">
+                    <div 
+                        onClick={() => setIsMobileSearchOpen(true)}
+                        className="flex-1 backdrop-blur-md p-3.5 rounded-2xl shadow-lg flex items-center gap-3 cursor-pointer transition-all"
+                        style={{
+                            background: 'var(--bg-surface)',
+                            border: '1px solid var(--border-surface)',
+                            color: 'var(--text-on-surface)'
+                        }}
+                    >
+                        <i className="fa-solid fa-magnifying-glass text-emerald-600 text-base"></i>
+                        <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>¿A dónde quieres ir hoy? (Planificar ruta)</span>
+                    </div>
+                    <button
+                        onClick={() => setIsSafeHavenOpen(true)}
+                        className="w-12 h-12 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center shadow-lg cursor-pointer border-none flex-shrink-0 animate-pulse"
+                        title="Botón SOS de Emergencia - Refugio CAI"
+                    >
+                        <i className="fa-solid fa-triangle-exclamation text-base"></i>
+                    </button>
                 </div>
             )}
 
@@ -1360,12 +1621,21 @@ export default function App() {
                             </span>
                         </div>
                     </div>
-                    <button
-                        onClick={() => setIsMobileSearchOpen(true)}
-                        className="py-1.5 px-3 bg-emerald-50 text-emerald-700 rounded-xl font-bold text-2xs cursor-pointer border-none flex-shrink-0"
-                    >
-                        Editar
-                    </button>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <button
+                            onClick={() => setIsSafeHavenOpen(true)}
+                            className="w-8 h-8 rounded-xl bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center shadow cursor-pointer border-none"
+                            title="SOS de Emergencia"
+                        >
+                            <i className="fa-solid fa-triangle-exclamation text-xs"></i>
+                        </button>
+                        <button
+                            onClick={() => setIsMobileSearchOpen(true)}
+                            className="py-1.5 px-3 bg-emerald-50 text-emerald-700 rounded-xl font-bold text-2xs cursor-pointer border-none"
+                        >
+                            Editar
+                        </button>
+                    </div>
                 </div>
             )}
 
@@ -1413,28 +1683,39 @@ export default function App() {
                             onSelectLocation={handleSelectDestLocation}
                             showGpsButton={false}
                         />
+
+                        {/* Mobile Departure Hour & Weather */}
+                        <div className="flex items-center justify-between pt-2 border-t border-slate-700/40 text-xs">
+                            <span className="text-slate-400 font-semibold flex items-center gap-1.5">
+                                <i className="fa-regular fa-clock text-emerald-400"></i> Hora de Salida:
+                            </span>
+                            <select
+                                value={departureHour === null ? '' : String(departureHour)}
+                                onChange={(e) => handleDepartureHourChange(e.target.value === '' ? null : parseInt(e.target.value, 10))}
+                                className="bg-slate-700 text-slate-100 text-xs rounded-lg px-2.5 py-1 border border-slate-600 cursor-pointer"
+                            >
+                                <option value="">Ahora (En vivo)</option>
+                                <option value="6">06:00 AM (Mañana)</option>
+                                <option value="12">12:00 PM (Mediodía)</option>
+                                <option value="18">18:00 PM (Hora Pico)</option>
+                                <option value="21">21:00 PM (Nocturno)</option>
+                            </select>
+                        </div>
+                        {weatherData && (
+                            <div className="flex items-center justify-between text-[11px] text-slate-300 bg-slate-800/80 px-2.5 py-1.5 rounded-lg border border-slate-700/30">
+                                <span>{weatherData.icon} {weatherData.temperature}°C {weatherData.description}</span>
+                                {weatherData.isRainy && <span className="text-rose-400 font-bold">🌧️ Lluvia (+1.4 Riesgo)</span>}
+                            </div>
+                        )}
                     </div>
 
-                    <div className="flex-grow overflow-y-auto flex flex-col gap-2 mb-5">
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Destinos Recomendados</span>
-                        {[
-                            { name: 'Portal Usme', coords: { lat: 4.5317, lng: -74.1166 } },
-                            { name: 'Estación Molinos', coords: { lat: 4.5631, lng: -74.1128 } },
-                            { name: 'Parque Metropolitano El Tunal', coords: { lat: 4.5761, lng: -74.1332 } },
-                            { name: 'UPZ Quiroga', coords: { lat: 4.5815, lng: -74.1118 } },
-                            { name: 'Parque Entre Nubes', coords: { lat: 4.5539, lng: -74.0934 } }
-                        ].map((loc, idx) => (
-                            <button
-                                key={idx}
-                                onClick={() => {
-                                    handleSelectDestLocation({ lat: loc.coords.lat, lng: loc.coords.lng }, loc.name);
-                                }}
-                                className="flex items-center gap-3 p-3 rounded-xl bg-slate-800/30 border border-slate-700/20 hover:bg-slate-800/60 transition-all text-left text-xs font-semibold text-slate-200 cursor-pointer border-none"
-                            >
-                                <i className="fa-solid fa-location-arrow text-slate-500 text-2xs"></i>
-                                <span>{loc.name}</span>
-                            </button>
-                        ))}
+                    <div className="my-3">
+                        <QuickDestinationChips
+                            onSelectDestination={(item) => {
+                                handleSelectDestLocation(item.coords, item.name);
+                            }}
+                            activeDestName={destInput}
+                        />
                     </div>
 
                     <div className="flex gap-2.5">
@@ -1701,18 +1982,55 @@ export default function App() {
                 </div>
             )}
 
+            {/* Ergonomía Móvil: Barra Inferior en la Zona del Pulgar (Heurística 4 y 7) */}
+            {isMobile && !isNavigating && !isMobileSearchOpen && (
+                <MobileBottomDock
+                    onOpenSearch={() => setIsMobileSearchOpen(true)}
+                    onToggleResults={() => {
+                        if (generatedRoutes.length > 0 || selectedSegmentId) {
+                            setIsBottomSheetExpanded(!isBottomSheetExpanded);
+                        } else {
+                            setIsMobileSearchOpen(true);
+                        }
+                    }}
+                    hasRoutes={generatedRoutes.length > 0}
+                    activeRouteCount={generatedRoutes.length}
+                    onEmergencySOS={() => setIsSafeHavenOpen(true)}
+                    onToggleCaravanas={() => {
+                        setMapLayers(prev => {
+                            const next = !prev.caravans;
+                            showToast(next ? 'Bici-Caravanas visibles en el mapa' : 'Capa de Caravanas desactivada', 'info');
+                            return { ...prev, caravans: next };
+                        });
+                    }}
+                    onOpenReport={() => {
+                        setIsReporting(true);
+                        setIsSelectingCoords(true);
+                        setSelectingLocationMode('report');
+                        showToast('Toca el mapa en el punto exacto para ubicar la novedad.', 'info');
+                    }}
+                    onToggleZen={() => {
+                        setIsZenMode(prev => {
+                            const next = !prev;
+                            showToast(next ? '🧘 Modo Zen: Mapa despejado' : 'Modo estándar restaurado', 'info');
+                            return next;
+                        });
+                    }}
+                    isZenMode={isZenMode}
+                />
+            )}
 
             {/* ==================== DESKTOP LAYOUT (md: relative flex-row) ==================== */}
 
-            {/* 5. Desktop Floating Header – hidden during active navigation */}
-            {!isMobile && !isNavigating && !leftDrawerOpen && (
+            {/* 5. Desktop Floating Header – hidden during active navigation and Zen mode */}
+            {!isMobile && !isNavigating && !leftDrawerOpen && !isZenMode && (
                 <div className="hidden md:block">
                     {headerComponent}
                 </div>
             )}
 
-            {/* 6. Desktop Left Drawer – hidden during active 3D navigation */}
-            {!isMobile && !isNavigating && (
+            {/* 6. Desktop Left Drawer – hidden during active 3D navigation and Zen mode */}
+            {!isMobile && !isNavigating && !isZenMode && (
                 <div className={`floating-drawer left-drawer ${leftDrawerOpen ? 'open' : 'closed'} hidden md:flex`}>
                     <div className="sidebar-tabs-vertical">
                         <button 
@@ -1744,9 +2062,82 @@ export default function App() {
                             <i className="fa-solid fa-traffic-light"></i>
                         </button>
 
-                        
-                        {/* Spacer to push dark mode button to the bottom */}
+                        {/* Botón de Emergencia Refugio Seguro / CAI (CU-03) */}
+                        <button
+                            onClick={() => setIsSafeHavenOpen(true)}
+                            className="tab-vertical-btn text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50"
+                            title="🚨 Refugio Seguro / CAI Más Cercano"
+                        >
+                            <i className="fa-solid fa-shield-halved text-rose-500 animate-pulse"></i>
+                        </button>
+
+                        {/* Herramientas de Investigación / Modo Científico (CU-06, CU-07, CU-08, CU-09) */}
+                        {viewMode === 'tech' && (
+                            <>
+                                <div className="w-6 h-[1px] bg-slate-200 dark:bg-slate-700 my-1 mx-auto"></div>
+                                <button
+                                    onClick={() => setIsInterventionModalOpen(true)}
+                                    className="tab-vertical-btn text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/50"
+                                    title="🔬 Simulador Distrital What-If (CU-06)"
+                                >
+                                    <i className="fa-solid fa-flask-vial"></i>
+                                </button>
+                                <button
+                                    onClick={() => setIsModelValidationOpen(true)}
+                                    className="tab-vertical-btn text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-950/50"
+                                    title="📊 Calibración & Backtesting Empírico (CU-07)"
+                                >
+                                    <i className="fa-solid fa-chart-line"></i>
+                                </button>
+                                <button
+                                    onClick={() => setIsPriorityHeatmapOpen(true)}
+                                    className="tab-vertical-btn text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/50"
+                                    title="🏛️ Priorización Inversión UAESP / IDU (CU-08)"
+                                >
+                                    <i className="fa-solid fa-landmark"></i>
+                                </button>
+                                <button
+                                    onClick={() => setIsCptedAuditOpen(true)}
+                                    className="tab-vertical-btn text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-950/50"
+                                    title="📋 Auditoría CPTED de Campo (CU-09)"
+                                >
+                                    <i className="fa-solid fa-clipboard-check"></i>
+                                </button>
+                            </>
+                        )}
+
+                        {/* Spacer to push utility buttons to the bottom */}
                         <div className="flex-grow"></div>
+
+                        {/* Botón Modo Zen (Z) (Heurística 8) */}
+                        <button 
+                            onClick={() => {
+                                setIsZenMode(true);
+                                showToast('🧘 Modo Zen activado (Presiona Z o Esc para salir)', 'info');
+                            }}
+                            className="tab-vertical-btn text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/50"
+                            title="Modo Zen: Mapa despejado (Tecla Z)"
+                        >
+                            <i className="fa-solid fa-expand"></i>
+                        </button>
+
+                        {/* Botón Atajos de Teclado (?) (Heurística 7) */}
+                        <button 
+                            onClick={() => setIsShortcutsOpen(true)}
+                            className="tab-vertical-btn text-slate-500 hover:text-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800"
+                            title="Atajos de teclado (?)"
+                        >
+                            <i className="fa-solid fa-keyboard"></i>
+                        </button>
+
+                        {/* Botón Micro-Tour Onboarding (Heurística 10) */}
+                        <button 
+                            onClick={() => setIsOnboardingOpen(true)}
+                            className="tab-vertical-btn text-slate-500 hover:text-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800"
+                            title="Guía de bienvenida y ayuda"
+                        >
+                            <i className="fa-solid fa-circle-question"></i>
+                        </button>
                         
                         <button 
                             onClick={() => {
@@ -1824,8 +2215,22 @@ export default function App() {
             )}
 
             {/* 7. Desktop Floating Map Controls (Top Right) */}
-            {!isMobile && !isNavigating && (
-                <div className="hidden md:flex absolute top-6 right-6 z-20 flex-col gap-2.5">
+            {!isMobile && !isNavigating && !isZenMode && (
+                <div className="hidden md:flex absolute top-6 right-6 z-20 flex-col gap-2.5 items-end">
+                    {/* Weather Live Widget (CU-01) */}
+                    {weatherData && (
+                        <div 
+                            className="px-3 py-2 rounded-2xl bg-white/95 dark:bg-slate-850/95 border border-slate-200/90 dark:border-slate-700 shadow-md flex items-center gap-2.5 text-xs font-bold text-slate-800 dark:text-slate-100 backdrop-blur-md animate-fade-in"
+                            title={`Clima en vivo Bogotá • Actualizado: ${weatherData.updatedAt}`}
+                        >
+                            <i className={`fa-solid ${weatherData.condition === 'lluvia' ? 'fa-cloud-showers-heavy text-blue-500' : 'fa-cloud-sun text-amber-500'} text-base`}></i>
+                            <div className="flex flex-col text-left">
+                                <span className="leading-tight text-xs font-black text-slate-900 dark:text-white">{weatherData.temperature}°C</span>
+                                <span className="text-[9px] text-slate-500 dark:text-slate-400 font-semibold leading-tight">{weatherData.description}</span>
+                            </div>
+                        </div>
+                    )}
+
                     <div className="relative">
                         <button 
                             onClick={() => setDesktopLayersOpen(!desktopLayersOpen)}
@@ -1847,6 +2252,10 @@ export default function App() {
                                     <label className="flex justify-between items-center py-0.5">
                                         <span className="text-slate-700">CAIs Policía</span>
                                         <input type="checkbox" checked={mapLayers.cais} onChange={e => setMapLayers(p=>({...p, cais: e.target.checked}))} className="accent-emerald-600 w-3.5 h-3.5"/>
+                                    </label>
+                                    <label className="flex justify-between items-center py-0.5">
+                                        <span className="text-slate-700">Bici-Caravanas</span>
+                                        <input type="checkbox" checked={mapLayers.caravans} onChange={e => setMapLayers(p=>({...p, caravans: e.target.checked}))} className="accent-emerald-600 w-3.5 h-3.5"/>
                                     </label>
                                     <label className="flex justify-between items-center py-0.5">
                                         <span className="text-slate-700">Obras IDU</span>
@@ -1879,15 +2288,101 @@ export default function App() {
                 </div>
             )}
 
-            {/* 8. Desktop Floating Footer (Bottom centered) – hidden during navigation */}
-            {!isMobile && !isNavigating && (
+            {/* 8. Desktop Floating Footer (Bottom centered) – hidden during navigation and Zen mode */}
+            {!isMobile && !isNavigating && !isZenMode && (
                 <footer className="hidden md:block absolute bottom-4 left-1/2 -translate-x-1/2 z-20 text-[10px] text-slate-500 text-center bg-white/80 py-1.5 px-4 rounded-full border border-slate-200/50 backdrop-blur shadow-sm">
-                    <p><strong>Ruta Clara v1.0.0 (MVP)</strong> • Semillero Construcción de software para la transformación del territorio</p>
+                    <p><strong>Ruta Clara v1.2.0</strong> • Semillero Construcción de software para la transformación del territorio</p>
                 </footer>
             )}
 
-            {/* 9. Cockpit HUD Overlay during 3D Navigation */}
+            {/* 9. Minimalist Floating Zen HUD Card (Heurística 8: Diseño estético y minimalista) */}
+            {isZenMode && (
+                <div className="fixed top-5 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 px-5 py-2.5 rounded-full bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl border border-slate-200/90 dark:border-slate-700 shadow-2xl animate-slide-down text-xs font-bold text-slate-800 dark:text-slate-100 select-none">
+                    <span className="flex items-center gap-1.5 text-emerald-600 font-black">
+                        <i className="fa-solid fa-eye text-xs"></i> Modo Zen
+                    </span>
+                    {activeRoute ? (
+                        <>
+                            <span className="text-slate-300 dark:text-slate-700">|</span>
+                            <span className="truncate max-w-[150px]">{activeRoute.name}</span>
+                            <span className="text-slate-500 font-semibold">{activeRoute.distanceKm} km • {activeRoute.durationMin} min</span>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                                activeRoute.maxRiskLevel === 'Bajo' ? 'bg-emerald-100 text-emerald-800' :
+                                activeRoute.maxRiskLevel === 'Medio' ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'
+                            }`}>
+                                Riesgo {activeRoute.avgRiskScore}
+                            </span>
+                        </>
+                    ) : (
+                        <>
+                            <span className="text-slate-300 dark:text-slate-700">|</span>
+                            <span className="text-slate-500">Exploración libre del mapa</span>
+                        </>
+                    )}
+                    <button
+                        onClick={() => setIsZenMode(false)}
+                        className="ml-2 px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 text-2xs font-extrabold flex items-center gap-1 border-none cursor-pointer transition-colors"
+                        title="Restaurar paneles (Tecla Z o Esc)"
+                    >
+                        <span>Salir</span>
+                        <kbd className="font-mono text-[9px] bg-slate-300 dark:bg-slate-700 px-1 rounded">Esc</kbd>
+                    </button>
+                </div>
+            )}
+
+            {/* 10. Cockpit HUD Overlay during 3D Navigation */}
             {cockpitHUD}
+
+            {/* ==================== MODALES DE CASOS DE USO INTEGRALES ==================== */}
+
+            {/* CU-03: Botón de Pánico y Refugio Seguro CAI */}
+            <SafeHavenEmergencyModal
+                isOpen={isSafeHavenOpen}
+                onClose={() => setIsSafeHavenOpen(false)}
+                currentCoords={cyclistCoords || (routePoints.origin ? [routePoints.origin.lat, routePoints.origin.lng] : null)}
+                onNavigateToHaven={handleNavigateToHaven}
+                onTriggerVoiceAlert={(msg) => audioGuidance.speakRaw(msg, true)}
+            />
+
+            {/* CU-06: Simulador Distrital What-If */}
+            <InterventionSimulatorModal
+                isOpen={isInterventionModalOpen}
+                onClose={() => setIsInterventionModalOpen(false)}
+                segments={segments}
+                localidad={localidad}
+                constructionZones={constructionZones}
+            />
+
+            {/* CU-07: Calibración & Backtesting Empírico */}
+            <ModelValidationModal
+                isOpen={isModelValidationOpen}
+                onClose={() => setIsModelValidationOpen(false)}
+                segments={segments}
+            />
+
+            {/* CU-08: Priorización de Inversión Pública UAESP / IDU (IPI) */}
+            <PriorityHeatmapPanel
+                isOpen={isPriorityHeatmapOpen}
+                onClose={() => setIsPriorityHeatmapOpen(false)}
+                segments={segments}
+                citizenReports={citizenReports}
+                localidad={localidad}
+                onZoomToSegment={(coords) => setZoomToCoords(coords)}
+            />
+
+            {/* CU-09: Formulario y Ficha de Auditoría CPTED de Campo */}
+            <CptedAuditModal
+                isOpen={isCptedAuditOpen}
+                onClose={() => setIsCptedAuditOpen(false)}
+                selectedSegment={selectedSegmentId ? segments[selectedSegmentId] : null}
+                onSaveAudit={handleSaveCptedAudit}
+            />
+
+            {/* ==================== SUITE DE NOTIFICACIONES & USABILIDAD ==================== */}
+            <ToastContainer toasts={toasts} onDismiss={handleDismissToast} />
+            <OnboardingTourModal isOpen={isOnboardingOpen} onClose={() => setIsOnboardingOpen(false)} />
+            <KeyboardShortcutsModal isOpen={isShortcutsOpen} onClose={() => setIsShortcutsOpen(false)} />
         </div>
     );
 }
+

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Input from '../atoms/Input';
 import Button from '../atoms/Button';
+import { emitToast } from '../../utils/toastService';
 
 // Ubicaciones comunes predefinidas para fallback y acceso rápido
 const PRESETS = [
@@ -100,7 +101,7 @@ export default function FormField({
 
     const handleGeolocate = () => {
         if (!navigator.geolocation) {
-            alert("La geolocalización no es soportada por tu navegador.");
+            emitToast("La geolocalización no es soportada por tu navegador.", "warning");
             return;
         }
 
@@ -129,11 +130,12 @@ export default function FormField({
                 if (onSelectLocation) {
                     onSelectLocation({ lat: latitude, lng: longitude }, displayName);
                 }
+                emitToast("Ubicación GPS fijada correctamente", "success");
                 setGpsLoading(false);
             },
             (error) => {
                 console.error("GPS Error:", error);
-                alert("No se pudo obtener tu ubicación. Por favor verifica los permisos de ubicación de tu navegador.");
+                emitToast("No se pudo obtener tu ubicación. Verifica los permisos de tu navegador.", "error");
                 setGpsLoading(false);
             },
             { enableHighAccuracy: true, timeout: 6000, maximumAge: 0 }
