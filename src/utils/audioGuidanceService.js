@@ -1,7 +1,7 @@
 /**
  * Audio Guidance & Voice Copilot Service for Ruta Clara
  * Provides natural, non-intrusive voice safety alerts, Web Audio API chimes,
- * audio unlocking for mobile devices (Android WebView & iOS Safari),
+ * FIFO speech queueing for multi-layer alerts, audio unlocking for mobile (Android WebView & iOS Safari),
  * and selectable voice models.
  */
 
@@ -12,12 +12,15 @@ class AudioGuidanceService {
         this.audioCtx = null;
         this.cooldowns = new Map(); // eventKey -> timestamp
         this.lastSpokenTime = 0;
-        this.minGlobalIntervalMs = 6000; // 6s between non-urgent voice cues
         this.selectedVoiceURI = null;
         this.selectedVoice = null;
         this.availableVoices = [];
         this.isAudioUnlocked = false;
-        this.resumeWatchdog = null;
+
+        // FIFO Speech Queue System
+        this.queue = [];
+        this.isProcessingQueue = false;
+        this.watchdogTimer = null;
 
         if (this.synth) {
             this.refreshVoices();
@@ -28,8 +31,7 @@ class AudioGuidanceService {
     }
 
     /**
-     * Unlocks audio on mobile / Android WebView upon any user gesture (touch / click).
-     * Necessary because mobile operating systems block autoplay audio until user interaction.
+     * Unlocks audio on mobile / Android WebView upon any user gesture.
      */
     unlockAudio() {
         if (this.isAudioUnlocked) return;
@@ -62,8 +64,7 @@ class AudioGuidanceService {
     }
 
     /**
-     * Plays a pleasant, immediate synthesized chime using the Web Audio API.
-     * Guaranteed to work on mobile devices even if TTS voices are loading or unavailable.
+     * Plays a pleasant synthesized chime using the Web Audio API.
      */
     playChime(type = 'alert') {
         if (!this.enabled) return;
@@ -101,43 +102,36 @@ class AudioGuidanceService {
             };
 
             if (type === 'start') {
-                // Uplifting two-tone chime (C5 -> E5)
                 playNote(523.25, now, 0.25, 0.25);
                 playNote(659.25, now + 0.15, 0.45, 0.3);
             } else if (type === 'red_light' || type === 'alert' || type === 'danger') {
-                // Dual alert chime
                 playNote(440, now, 0.18, 0.25, 'triangle');
                 playNote(370, now + 0.15, 0.35, 0.28, 'triangle');
             } else if (type === 'green_light') {
-                // Crisp gentle chime (E5 -> G5)
                 playNote(659.25, now, 0.18, 0.2);
                 playNote(783.99, now + 0.12, 0.3, 0.22);
             } else if (type === 'success') {
-                // Ascending major triad
                 playNote(523.25, now, 0.2, 0.2);
                 playNote(659.25, now + 0.15, 0.2, 0.25);
                 playNote(783.99, now + 0.3, 0.5, 0.3);
             } else {
-                // Single short prompt
                 playNote(587.33, now, 0.2, 0.2);
             }
         } catch (e) {
-            // Audio context failed gracefully
+            // Context gracefully handled
         }
     }
 
     refreshVoices() {
         if (!this.synth) return;
         const all = this.synth.getVoices() || [];
-        // Filter Spanish voices
-        this.availableVoices = all.filter(v => 
+        this.availableVoices = all.filter(v =>
             v.lang.startsWith('es') || 
             v.lang.includes('ES') || 
             v.lang.includes('spanish') || 
             v.name.toLowerCase().includes('spanish')
         );
 
-        // Pick best natural voice by default
         if (!this.selectedVoice && this.availableVoices.length > 0) {
             const natural = this.availableVoices.find(v => 
                 v.name.includes('Natural') || 
@@ -175,27 +169,24 @@ class AudioGuidanceService {
 
     setEnabled(val) {
         this.enabled = val;
-        if (!val && this.synth) {
-            this.synth.cancel();
+        if (!val) {
+            this.stop();
         }
     }
 
-    /**
-     * Direct alias for speakRaw so both audioGuidance.speak(...) and audioGuidance.speakRaw(...) work seamlessly
-     */
     speak(text, isPriority = false) {
         this.speakRaw(text, isPriority);
     }
 
     /**
-     * Speaks an event with strict cooldown protection and plays an appropriate chime
+     * Queue & speak an event with cooldown per eventKey.
      */
-    speakEvent(eventKey, text, cooldownSeconds = 30, isPriority = false) {
+    speakEvent(eventKey, text, cooldownSeconds = 20, isPriority = false) {
         if (!this.enabled || !text) return false;
 
         const now = Date.now();
 
-        // 1. Check event-specific cooldown
+        // Check event-specific cooldown
         if (eventKey && this.cooldowns.has(eventKey)) {
             const lastTime = this.cooldowns.get(eventKey);
             if ((now - lastTime) < (cooldownSeconds * 1000)) {
@@ -203,38 +194,20 @@ class AudioGuidanceService {
             }
         }
 
-        // 2. Check global minimum interval
-        if (!isPriority && (now - this.lastSpokenTime) < this.minGlobalIntervalMs) {
-            return false;
-        }
-
-        // Register cooldown
         if (eventKey) {
             this.cooldowns.set(eventKey, now);
         }
-        this.lastSpokenTime = now;
 
-        // Play chime according to context
-        if (eventKey && (eventKey.includes('light_red') || eventKey.includes('rob') || eventKey.includes('acc') || eventKey.includes('danger'))) {
-            this.playChime('red_light');
-        } else if (eventKey && eventKey.includes('light_green')) {
-            this.playChime('green_light');
-        } else {
-            this.playChime('alert');
-        }
-
-        // Delay voice 180ms so the chime doesn't mask the voice
-        setTimeout(() => {
-            this.speakRaw(text, isPriority);
-        }, 180);
-
+        this.enqueueMessage(text, isPriority, eventKey);
         return true;
     }
 
     speakRaw(text, isPriority = false) {
         if (!this.enabled || !text) return;
+        this.enqueueMessage(text, isPriority, null);
+    }
 
-        // Ensure audio context is primed
+    enqueueMessage(text, isPriority, eventKey) {
         this.unlockAudio();
 
         const cleanText = text
@@ -244,24 +217,53 @@ class AudioGuidanceService {
 
         if (!cleanText) return;
 
+        const item = { text: cleanText, isPriority, eventKey };
+
+        if (isPriority) {
+            // Urgent alert: clear normal queue items and place priority at front
+            this.queue = this.queue.filter(q => q.isPriority);
+            this.queue.unshift(item);
+            if (this.synth && this.synth.speaking) {
+                this.synth.cancel();
+            }
+        } else {
+            // Avoid duplicate text in queue
+            if (!this.queue.some(q => q.text === cleanText)) {
+                this.queue.push(item);
+            }
+        }
+
+        this.processQueue();
+    }
+
+    processQueue() {
+        if (!this.enabled || this.isProcessingQueue || this.queue.length === 0) return;
+
+        this.isProcessingQueue = true;
+        const current = this.queue.shift();
+
+        // Chime for event feedback
+        if (current.eventKey && (current.eventKey.includes('red') || current.eventKey.includes('rob') || current.eventKey.includes('acc') || current.eventKey.includes('danger'))) {
+            this.playChime('red_light');
+        } else if (current.eventKey && current.eventKey.includes('green')) {
+            this.playChime('green_light');
+        } else {
+            this.playChime('alert');
+        }
+
         if (!this.synth) {
-            // Fallback: at least play chime if no synth available
-            this.playChime(isPriority ? 'alert' : 'start');
+            this.isProcessingQueue = false;
+            setTimeout(() => this.processQueue(), 400);
             return;
         }
 
-        if (isPriority) {
-            this.synth.cancel();
-        }
-
-        // Android SpeechSynthesis Watchdog: Keep awake while speaking
         if (this.synth.paused) {
             this.synth.resume();
         }
 
-        const utterance = new SpeechSynthesisUtterance(cleanText);
+        const utterance = new SpeechSynthesisUtterance(current.text);
         utterance.lang = this.selectedVoice ? this.selectedVoice.lang : 'es-CO';
-        utterance.rate = 0.98; // Clear natural cadence
+        utterance.rate = 0.98;
         utterance.pitch = 1.0;
         utterance.volume = 1.0;
 
@@ -269,32 +271,41 @@ class AudioGuidanceService {
             utterance.voice = this.selectedVoice;
         }
 
-        // Chrome/Android bug workaround: resume if utterance stalls
-        clearInterval(this.resumeWatchdog);
-        this.resumeWatchdog = setInterval(() => {
-            if (this.synth && this.synth.speaking && this.synth.paused) {
-                this.synth.resume();
-            } else if (this.synth && !this.synth.speaking) {
-                clearInterval(this.resumeWatchdog);
+        // Safety Watchdog in case TTS stalls in Android WebView
+        clearTimeout(this.watchdogTimer);
+        this.watchdogTimer = setTimeout(() => {
+            if (this.synth && this.synth.speaking) {
+                this.synth.cancel();
             }
-        }, 3000);
+            this.isProcessingQueue = false;
+            this.processQueue();
+        }, 7000);
 
         utterance.onend = () => {
-            clearInterval(this.resumeWatchdog);
-        };
-        utterance.onerror = (err) => {
-            clearInterval(this.resumeWatchdog);
-            console.warn('SpeechSynthesis error:', err);
+            clearTimeout(this.watchdogTimer);
+            this.isProcessingQueue = false;
+            setTimeout(() => this.processQueue(), 300);
         };
 
-        this.synth.speak(utterance);
+        utterance.onerror = (err) => {
+            clearTimeout(this.watchdogTimer);
+            console.warn('Speech error:', err);
+            this.isProcessingQueue = false;
+            setTimeout(() => this.processQueue(), 200);
+        };
+
+        setTimeout(() => {
+            this.synth.speak(utterance);
+        }, 150);
     }
 
     stop() {
+        this.queue = [];
+        this.isProcessingQueue = false;
+        clearTimeout(this.watchdogTimer);
         if (this.synth) {
             this.synth.cancel();
         }
-        clearInterval(this.resumeWatchdog);
         this.cooldowns.clear();
     }
 }
