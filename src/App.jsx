@@ -19,6 +19,7 @@ import { caiPoints } from './data/caiPoints';
 import { fetchBogotaTrafficLights } from './utils/trafficLightsService';
 import { audioGuidance } from './utils/audioGuidanceService';
 import { wakeLockService } from './utils/wakeLockService';
+import { generateRouteManeuvers, getUpcomingManeuver } from './utils/navigationManeuverService';
 import { fetchBogotaWeather } from './utils/weatherService';
 import { calculateRouteElevationProfile } from './utils/elevationService';
 import SafeHavenEmergencyModal from './components/molecules/SafeHavenEmergencyModal';
@@ -396,6 +397,12 @@ export default function App() {
 
     const activeRoute = generatedRoutes.find(r => r.id === activeRouteId);
 
+    // Turn-by-turn Waze-style maneuvers calculated for active route
+    const routeManeuvers = useMemo(() => {
+        if (!activeRoute || !activeRoute.coordinates || activeRoute.coordinates.length < 2) return [];
+        return generateRouteManeuvers(activeRoute.coordinates);
+    }, [activeRouteId, generatedRoutes]);
+
     // Precalculate dense interpolated points (~6m apart) ONCE when active route changes
     const denseCoords = useMemo(() => {
         if (!activeRoute || !activeRoute.coordinates || activeRoute.coordinates.length < 2) return [];
@@ -532,6 +539,27 @@ export default function App() {
             const baseSpeed = 19;
             const variance = Math.sin(nextIdx * 0.2) * 2.5;
             setSpeedKmh(Math.round(baseSpeed + variance));
+
+            // Waze Turn-by-turn Maneuvers Engine
+            if (routeManeuvers && routeManeuvers.length > 0) {
+                const upcoming = getUpcomingManeuver(currentPt, routeManeuvers, currIdx);
+                if (upcoming && upcoming.maneuver.type !== 'destination') {
+                    const { maneuver, distanceMeters } = upcoming;
+                    if (distanceMeters <= 160 && distanceMeters >= 110 && !maneuver.announced150) {
+                        maneuver.announced150 = true;
+                        setHudRecommendation(`↗️ En 150m: ${maneuver.shortText}`);
+                        audioGuidance.speak(`En ciento cincuenta metros, ${maneuver.instruction.toLowerCase()}.`);
+                    } else if (distanceMeters <= 60 && distanceMeters >= 30 && !maneuver.announced50) {
+                        maneuver.announced50 = true;
+                        setHudRecommendation(`↩️ En 50m: ${maneuver.shortText}`);
+                        audioGuidance.speak(`En cincuenta metros, prepárate para ${maneuver.instruction.toLowerCase()}.`);
+                    } else if (distanceMeters < 20 && !maneuver.announcedNow) {
+                        maneuver.announcedNow = true;
+                        setHudRecommendation(`🔄 ${maneuver.shortText} ahora`);
+                        audioGuidance.speak(`${maneuver.instruction} ahora.`);
+                    }
+                }
+            }
 
             // Dynamic recommendations & Voice Copilot periodically (every 8 steps = ~50m)
             if (nextIdx % 8 === 0) {
@@ -1316,8 +1344,8 @@ export default function App() {
         setActiveRouteId('route_0');
         setIsLoading(false);
 
-        // Mobile Bottom Sheet UX: Expand when routes are plotted
-        setIsBottomSheetExpanded(true);
+        // Mobile Bottom Sheet UX: Auto-reduce so the user can immediately analyze the plotted route on the map
+        setIsBottomSheetExpanded(false);
     };
 
     // Handler para escape y navegación inmediata a CAI (CU-03)
@@ -1420,53 +1448,17 @@ export default function App() {
         setCyclistIndex(0);
         setCyclistCoords(activeRoute.coordinates[0]);
 
-        // Evaluate comprehensive route risk & hazards for opening speech briefing
-        const distKm = (activeRoute.distanceKm || (activeRoute.distance / 1000) || 3.2).toFixed(1);
-        const timeMin = Math.round(activeRoute.durationMinutes || (distKm * 3.5) || 12);
-        const riskScore = (activeRoute.avgRiskScore || 2.8).toFixed(1);
-        const riskLevel = activeRoute.avgRiskScore >= 7.0 ? 'Alto' : (activeRoute.avgRiskScore >= 3.8 ? 'Medio' : 'Bajo');
-        const destName = destInput || 'tu destino';
-
-        // Count hazards along the active route
-        const routeRobberies = robberyReports.filter(r =>
-            activeRoute.coordinates.some(pt => (Math.sqrt(Math.pow(pt[0] - r.lat, 2) + Math.pow(pt[1] - r.lng, 2)) * 111000) <= 120)
-        );
-        const routeAccidents = accidentPoints.filter(a =>
-            activeRoute.coordinates.some(pt => (Math.sqrt(Math.pow(pt[0] - a.lat, 2) + Math.pow(pt[1] - a.lng, 2)) * 111000) <= 120)
-        );
-        const routeConst = constructionZones.filter(z =>
-            activeRoute.coordinates.some(pt => (Math.sqrt(Math.pow(pt[0] - z.lat, 2) + Math.pow(pt[1] - z.lng, 2)) * 111000) <= z.radius + 30)
-        );
-
-        let riskSpeech = `Iniciando viaje hacia ${destName}. Distancia estimada: ${distKm} kilómetros, tiempo aproximado: ${timeMin} minutos. Nivel de riesgo de la ruta: ${riskLevel}, con puntuación de seguridad de ${riskScore} sobre 10. `;
-
-        if (riskLevel === 'Alto') {
-            riskSpeech += `Atención: Esta ruta presenta tramos críticos. `;
-        } else if (riskLevel === 'Medio') {
-            riskSpeech += `Ruta con nivel de riesgo moderado. `;
-        } else {
-            riskSpeech += `Ruta catalogada como segura y preferencial para ciclistas. `;
+        // Reset maneuvers announcement flags
+        if (routeManeuvers && routeManeuvers.length > 0) {
+            routeManeuvers.forEach(m => {
+                m.announced150 = false;
+                m.announced50 = false;
+                m.announcedNow = false;
+            });
         }
 
-        if (routeRobberies.length > 0) {
-            riskSpeech += `Precaución, se registran ${routeRobberies.length} reportes de hurto en el trazado. `;
-        }
-        if (routeAccidents.length > 0) {
-            riskSpeech += `Atención a ${routeAccidents.length} zonas de siniestros viales. `;
-        }
-        if (routeConst.length > 0) {
-            riskSpeech += `Se identificaron obras viales del IDU en la vía. `;
-        }
-        if (simulationState.weather === 'lluvia') {
-            riskSpeech += `Pronóstico de lluvia activo en tu sector, calzada resbaladiza. `;
-        }
-
-        riskSpeech += `Te acompañaré durante todo el trayecto con copiloto de voz y alertas en tiempo real. ¡Buen viaje y pedalea con precaución!`;
-
-        audioGuidance.playChime('start');
-        setTimeout(() => {
-            audioGuidance.speak(riskSpeech, true);
-        }, 300);
+        const destName = destInput ? destInput.replace('📍', '').trim() : 'tu destino';
+        audioGuidance.speak(`Iniciando recorrido hacia ${destName}. Continúa recto por la ciclorruta.`, true);
     };
 
     // 15. Calculate active predictions and CPTED recommendations
@@ -1526,6 +1518,12 @@ export default function App() {
         recommendations = getRecommendations(segment, currentPrediction, simulationState);
     }
 
+    // Handle selecting a route: switch active route and collapse bottom sheet to allow full map analysis
+    const handleSelectRoute = (routeId) => {
+        setActiveRouteId(routeId);
+        setIsBottomSheetExpanded(false);
+    };
+
     // Prepare subcomponents as JSX to render inside layouts
     const headerComponent = (
         <FloatingHeader
@@ -1550,7 +1548,7 @@ export default function App() {
             onLocationSelect={handleLocationSelect}
             generatedRoutes={generatedRoutes}
             activeRouteId={activeRouteId}
-            onSelectRoute={setActiveRouteId}
+            onSelectRoute={handleSelectRoute}
             simulationState={simulationState}
             bikeSegments={segments}
             constructionZones={constructionZones}
@@ -1572,6 +1570,7 @@ export default function App() {
             leftDrawerOpen={leftDrawerOpen}
             rightDrawerOpen={rightDrawerOpen}
             isMobile={isMobile}
+            isBottomSheetExpanded={isBottomSheetExpanded}
         />
     );
 
@@ -1625,7 +1624,7 @@ export default function App() {
             hasRoute={generatedRoutes.length > 0}
             generatedRoutes={generatedRoutes}
             activeRouteId={activeRouteId}
-            onSelectRoute={setActiveRouteId}
+            onSelectRoute={handleSelectRoute}
             recommendations={recommendations}
             viewMode={viewMode}
             trafficJamsOnRoute={activeRoute ? activeRoute.trafficJamsOnRoute : []}

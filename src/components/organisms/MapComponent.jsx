@@ -109,6 +109,7 @@ export default function MapComponent({
     leftDrawerOpen = true,
     rightDrawerOpen = true,
     isMobile = false,
+    isBottomSheetExpanded = false,
     isCameraLocked = true,
     onCameraLockChange
 }) {
@@ -938,11 +939,11 @@ export default function MapComponent({
         if (activeRoute && activeRoute.coordinates && activeRoute.coordinates.length > 0) {
             const bounds = L.latLngBounds(activeRoute.coordinates);
             if (bounds.isValid()) {
-                // Dynamically offset bounds so no part of the route is hidden behind left/right panels
+                // Dynamically offset bounds so no part of the route is hidden behind bottom sheet or side panels
                 const leftPadding = isMobile ? 25 : (leftDrawerOpen ? 460 : 60);
                 const rightPadding = isMobile ? 25 : (rightDrawerOpen ? 370 : 60);
                 const topPadding = isMobile ? 90 : 60;
-                const bottomPadding = isMobile ? 220 : 60;
+                const bottomPadding = isMobile ? (isBottomSheetExpanded ? 380 : 160) : 60;
 
                 map.fitBounds(bounds, {
                     paddingTopLeft: [leftPadding, topPadding],
@@ -953,7 +954,7 @@ export default function MapComponent({
                 });
             }
         }
-    }, [activeRouteId, leftDrawerOpen, rightDrawerOpen, isMobile, isNavigating]);
+    }, [activeRouteId, leftDrawerOpen, rightDrawerOpen, isMobile, isNavigating, isBottomSheetExpanded]);
 
     // 6b. Draw global traffic jam overlay polylines and markers
     useEffect(() => {
@@ -1272,10 +1273,13 @@ export default function MapComponent({
         trafficLights.forEach(light => {
             const onRoute = activeRouteCoords && activeRouteCoords.length > 0 && isNearRoute(light.coordinates[0], light.coordinates[1], activeRouteCoords, 100);
 
-            // If not directly on route, check layer setting and zoom threshold
-            if (!onRoute) {
+            // If an active route is present, ONLY display traffic lights directly on the route corridor
+            // to avoid blackening the entire map with dozens of off-route intersections!
+            if (activeRouteCoords && activeRouteCoords.length > 0) {
+                if (!onRoute) return;
+            } else {
                 if (mapLayers.trafficLights === false) return;
-                if (!shouldShowMarker(light.coordinates[0], light.coordinates[1], null, currentZoom, 13, 100)) return;
+                if (!shouldShowMarker(light.coordinates[0], light.coordinates[1], null, currentZoom, 14, 100)) return;
             }
 
             const lightColor = light.state === 'verde' ? '#10b981' : (light.state === 'amarillo' ? '#eab308' : '#ef4444');

@@ -1,26 +1,31 @@
 /**
- * Audio Guidance & Voice Copilot Service for Ruta Clara
- * Provides natural, non-intrusive voice safety alerts, Web Audio API chimes,
- * FIFO speech queueing for multi-layer alerts, audio unlocking for mobile (Android WebView & iOS Safari),
- * and selectable voice models.
+ * Audio Guidance & Voice Copilot Service (Waze-style Copilot) for Ruta Clara
+ * Provides natural, fluent, professional Spanish voice guidance for turns,
+ * maneuvers, safety alerts, and traffic signals.
+ * 
+ * Uses @capacitor-community/text-to-speech on native Android devices for high-definition
+ * system voices, and a bulletproof SpeechSynthesis engine on Web browsers with zero arcade beeps.
  */
+
+import { TextToSpeech } from '@capacitor-community/text-to-speech';
+import { Capacitor } from '@capacitor/core';
 
 class AudioGuidanceService {
     constructor() {
         this.enabled = true;
+        this.isNative = typeof Capacitor !== 'undefined' && Capacitor.isNativePlatform();
         this.synth = typeof window !== 'undefined' && 'speechSynthesis' in window ? window.speechSynthesis : null;
-        this.audioCtx = null;
         this.cooldowns = new Map(); // eventKey -> timestamp
         this.lastSpokenTime = 0;
-        this.selectedVoiceURI = null;
+        this.minGlobalIntervalMs = 3500; // 3.5s minimum gap between non-urgent prompts
         this.selectedVoice = null;
         this.availableVoices = [];
+        this.activeUtterance = null; // Prevent Chromium garbage collection bug
         this.isAudioUnlocked = false;
 
-        // FIFO Speech Queue System
+        // Queue
         this.queue = [];
         this.isProcessingQueue = false;
-        this.watchdogTimer = null;
 
         if (this.synth) {
             this.refreshVoices();
@@ -31,120 +36,40 @@ class AudioGuidanceService {
     }
 
     /**
-     * Unlocks audio on mobile / Android WebView upon any user gesture.
+     * Unlocks audio on mobile / Android upon user interaction
      */
     unlockAudio() {
         if (this.isAudioUnlocked) return;
-
-        try {
-            const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-            if (AudioContextClass && !this.audioCtx) {
-                this.audioCtx = new AudioContextClass();
-            }
-            if (this.audioCtx && this.audioCtx.state === 'suspended') {
-                this.audioCtx.resume();
-            }
-        } catch (e) {
-            console.warn('AudioContext unlock note:', e.message);
-        }
+        this.isAudioUnlocked = true;
 
         if (this.synth) {
             try {
                 this.synth.resume();
-                // Silent micro-utterance to prime Android TTS engine
-                const primeUtterance = new SpeechSynthesisUtterance(' ');
-                primeUtterance.volume = 0.01;
-                this.synth.speak(primeUtterance);
             } catch (e) {
-                console.warn('SpeechSynthesis prime note:', e.message);
+                // Ignore resume errors
             }
-        }
-
-        this.isAudioUnlocked = true;
-    }
-
-    /**
-     * Plays a pleasant synthesized chime using the Web Audio API.
-     */
-    playChime(type = 'alert') {
-        if (!this.enabled) return;
-
-        try {
-            const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-            if (!this.audioCtx && AudioContextClass) {
-                this.audioCtx = new AudioContextClass();
-            }
-            if (!this.audioCtx) return;
-
-            if (this.audioCtx.state === 'suspended') {
-                this.audioCtx.resume();
-            }
-
-            const ctx = this.audioCtx;
-            const now = ctx.currentTime;
-
-            const playNote = (freq, startTime, duration, gainValue = 0.2, oscType = 'sine') => {
-                const osc = ctx.createOscillator();
-                const gain = ctx.createGain();
-
-                osc.type = oscType;
-                osc.frequency.setValueAtTime(freq, startTime);
-
-                gain.gain.setValueAtTime(0.001, startTime);
-                gain.gain.exponentialRampToValueAtTime(gainValue, startTime + 0.02);
-                gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
-
-                osc.connect(gain);
-                gain.connect(ctx.destination);
-
-                osc.start(startTime);
-                osc.stop(startTime + duration);
-            };
-
-            if (type === 'start') {
-                playNote(523.25, now, 0.25, 0.25);
-                playNote(659.25, now + 0.15, 0.45, 0.3);
-            } else if (type === 'red_light' || type === 'alert' || type === 'danger') {
-                playNote(440, now, 0.18, 0.25, 'triangle');
-                playNote(370, now + 0.15, 0.35, 0.28, 'triangle');
-            } else if (type === 'green_light') {
-                playNote(659.25, now, 0.18, 0.2);
-                playNote(783.99, now + 0.12, 0.3, 0.22);
-            } else if (type === 'success') {
-                playNote(523.25, now, 0.2, 0.2);
-                playNote(659.25, now + 0.15, 0.2, 0.25);
-                playNote(783.99, now + 0.3, 0.5, 0.3);
-            } else {
-                playNote(587.33, now, 0.2, 0.2);
-            }
-        } catch (e) {
-            // Context gracefully handled
         }
     }
 
     refreshVoices() {
         if (!this.synth) return;
         const all = this.synth.getVoices() || [];
+        if (all.length === 0) return;
+
+        // Find Spanish voices
         this.availableVoices = all.filter(v =>
-            v.lang.startsWith('es') || 
-            v.lang.includes('ES') || 
-            v.lang.includes('spanish') || 
-            v.name.toLowerCase().includes('spanish')
+            (v.lang && (v.lang.startsWith('es') || v.lang.includes('ES'))) ||
+            (v.name && v.name.toLowerCase().includes('spanish')) ||
+            (v.name && (v.name.includes('Sabina') || v.name.includes('Helena') || v.name.includes('Laura') || v.name.includes('Paulina')))
         );
 
-        if (!this.selectedVoice && this.availableVoices.length > 0) {
-            const natural = this.availableVoices.find(v => 
-                v.name.includes('Natural') || 
-                v.name.includes('Online') || 
-                v.name.includes('Google')
+        if (this.availableVoices.length > 0) {
+            // Prioritize Latin American / Natural Spanish voices
+            const preferred = this.availableVoices.find(v => 
+                v.lang === 'es-CO' || v.lang === 'es-419' || v.lang === 'es-MX' || v.lang === 'es-US' ||
+                v.name.includes('Sabina') || v.name.includes('Google') || v.name.includes('Natural')
             );
-            const latin = this.availableVoices.find(v => 
-                v.lang === 'es-CO' || v.lang === 'es-419' || v.lang === 'es-US' || v.lang === 'es-MX'
-            );
-            this.selectedVoice = natural || latin || this.availableVoices[0];
-            this.selectedVoiceURI = this.selectedVoice.voiceURI;
-        } else if (this.selectedVoiceURI) {
-            this.selectedVoice = this.availableVoices.find(v => v.voiceURI === this.selectedVoiceURI) || this.selectedVoice;
+            this.selectedVoice = preferred || this.availableVoices[0];
         }
     }
 
@@ -154,12 +79,11 @@ class AudioGuidanceService {
             uri: v.voiceURI,
             name: v.name.replace(/Microsoft |Google |Android /g, ''),
             lang: v.lang,
-            isNatural: v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Online')
+            isNatural: true
         }));
     }
 
     setVoice(voiceURI) {
-        this.selectedVoiceURI = voiceURI;
         this.refreshVoices();
         const match = this.availableVoices.find(v => v.voiceURI === voiceURI);
         if (match) {
@@ -174,19 +98,22 @@ class AudioGuidanceService {
         }
     }
 
+    /**
+     * Direct speak method (Waze style, immediate and natural)
+     */
     speak(text, isPriority = false) {
         this.speakRaw(text, isPriority);
     }
 
     /**
-     * Queue & speak an event with cooldown per eventKey.
+     * Speaks an event with cooldown protection per event key
      */
-    speakEvent(eventKey, text, cooldownSeconds = 20, isPriority = false) {
+    speakEvent(eventKey, text, cooldownSeconds = 15, isPriority = false) {
         if (!this.enabled || !text) return false;
 
         const now = Date.now();
 
-        // Check event-specific cooldown
+        // Check event cooldown
         if (eventKey && this.cooldowns.has(eventKey)) {
             const lastTime = this.cooldowns.get(eventKey);
             if ((now - lastTime) < (cooldownSeconds * 1000)) {
@@ -194,41 +121,46 @@ class AudioGuidanceService {
             }
         }
 
+        // Global interval check for non-priority messages
+        if (!isPriority && (now - this.lastSpokenTime) < this.minGlobalIntervalMs) {
+            return false;
+        }
+
         if (eventKey) {
             this.cooldowns.set(eventKey, now);
         }
+        this.lastSpokenTime = now;
 
-        this.enqueueMessage(text, isPriority, eventKey);
+        this.enqueueMessage(text, isPriority);
         return true;
     }
 
     speakRaw(text, isPriority = false) {
         if (!this.enabled || !text) return;
-        this.enqueueMessage(text, isPriority, null);
+        this.enqueueMessage(text, isPriority);
     }
 
-    enqueueMessage(text, isPriority, eventKey) {
+    enqueueMessage(text, isPriority) {
         this.unlockAudio();
 
+        // Clean emojis, markdown symbols, and unnecessary symbols for crisp human speech
         const cleanText = text
             .replace(/[\p{Extended_Pictographic}\uFE0F]/gu, '')
+            .replace(/[•*#_~`[\]()]/g, ' ')
             .replace(/\s+/g, ' ')
             .trim();
 
         if (!cleanText) return;
 
-        const item = { text: cleanText, isPriority, eventKey };
+        const item = { text: cleanText, isPriority };
 
         if (isPriority) {
-            // Urgent alert: clear normal queue items and place priority at front
             this.queue = this.queue.filter(q => q.isPriority);
             this.queue.unshift(item);
-            if (this.synth && this.synth.speaking) {
-                this.synth.cancel();
-            }
+            this.stopCurrentSpeech();
         } else {
-            // Avoid duplicate text in queue
-            if (!this.queue.some(q => q.text === cleanText)) {
+            // Avoid queuing identical consecutive phrases
+            if (this.queue.length === 0 || this.queue[this.queue.length - 1].text !== cleanText) {
                 this.queue.push(item);
             }
         }
@@ -236,76 +168,114 @@ class AudioGuidanceService {
         this.processQueue();
     }
 
-    processQueue() {
+    async processQueue() {
         if (!this.enabled || this.isProcessingQueue || this.queue.length === 0) return;
 
         this.isProcessingQueue = true;
         const current = this.queue.shift();
 
-        // Chime for event feedback
-        if (current.eventKey && (current.eventKey.includes('red') || current.eventKey.includes('rob') || current.eventKey.includes('acc') || current.eventKey.includes('danger'))) {
-            this.playChime('red_light');
-        } else if (current.eventKey && current.eventKey.includes('green')) {
-            this.playChime('green_light');
-        } else {
-            this.playChime('alert');
-        }
-
-        if (!this.synth) {
-            this.isProcessingQueue = false;
-            setTimeout(() => this.processQueue(), 400);
-            return;
-        }
-
-        if (this.synth.paused) {
-            this.synth.resume();
-        }
-
-        const utterance = new SpeechSynthesisUtterance(current.text);
-        utterance.lang = this.selectedVoice ? this.selectedVoice.lang : 'es-CO';
-        utterance.rate = 0.98;
-        utterance.pitch = 1.0;
-        utterance.volume = 1.0;
-
-        if (this.selectedVoice) {
-            utterance.voice = this.selectedVoice;
-        }
-
-        // Safety Watchdog in case TTS stalls in Android WebView
-        clearTimeout(this.watchdogTimer);
-        this.watchdogTimer = setTimeout(() => {
-            if (this.synth && this.synth.speaking) {
-                this.synth.cancel();
+        try {
+            // 1. If running on native Android APK, use native Android TTS
+            if (this.isNative) {
+                await TextToSpeech.speak({
+                    text: current.text,
+                    lang: 'es-CO',
+                    rate: 1.05,
+                    pitch: 1.0,
+                    volume: 1.0,
+                    category: 'ambient'
+                });
+                this.isProcessingQueue = false;
+                setTimeout(() => this.processQueue(), 300);
+                return;
             }
-            this.isProcessingQueue = false;
-            this.processQueue();
-        }, 7000);
 
-        utterance.onend = () => {
-            clearTimeout(this.watchdogTimer);
+            // 2. Web Browser Fallback with Web Speech API
+            if (!this.synth) {
+                this.isProcessingQueue = false;
+                return;
+            }
+
+            if (this.synth.paused) {
+                this.synth.resume();
+            }
+
+            this.refreshVoices();
+
+            const utterance = new SpeechSynthesisUtterance(current.text);
+            this.activeUtterance = utterance; // Prevent garbage collection bug
+
+            // Language & voice selection
+            if (this.selectedVoice) {
+                utterance.voice = this.selectedVoice;
+                utterance.lang = this.selectedVoice.lang;
+            } else if (this.availableVoices.length > 0) {
+                utterance.voice = this.availableVoices[0];
+                utterance.lang = this.availableVoices[0].lang;
+            } else {
+                utterance.lang = 'es-ES'; // Safe default
+            }
+
+            utterance.rate = 1.02; // Natural, confident Waze-like cadence
+            utterance.pitch = 1.0;
+            utterance.volume = 1.0;
+
+            let safetyTimer = setTimeout(() => {
+                if (this.synth && this.synth.speaking) {
+                    this.synth.cancel();
+                }
+                this.activeUtterance = null;
+                this.isProcessingQueue = false;
+                this.processQueue();
+            }, 8000);
+
+            utterance.onend = () => {
+                clearTimeout(safetyTimer);
+                this.activeUtterance = null;
+                this.isProcessingQueue = false;
+                setTimeout(() => this.processQueue(), 250);
+            };
+
+            utterance.onerror = (e) => {
+                clearTimeout(safetyTimer);
+                console.warn('SpeechSynthesis note:', e.error || e);
+                this.activeUtterance = null;
+                this.isProcessingQueue = false;
+                setTimeout(() => this.processQueue(), 250);
+            };
+
+            this.synth.speak(utterance);
+
+        } catch (err) {
+            console.warn('TextToSpeech error:', err);
+            this.activeUtterance = null;
             this.isProcessingQueue = false;
             setTimeout(() => this.processQueue(), 300);
-        };
+        }
+    }
 
-        utterance.onerror = (err) => {
-            clearTimeout(this.watchdogTimer);
-            console.warn('Speech error:', err);
-            this.isProcessingQueue = false;
-            setTimeout(() => this.processQueue(), 200);
-        };
-
-        setTimeout(() => {
-            this.synth.speak(utterance);
-        }, 150);
+    stopCurrentSpeech() {
+        if (this.isNative) {
+            try {
+                TextToSpeech.stop();
+            } catch (e) {
+                // Ignore
+            }
+        }
+        if (this.synth) {
+            try {
+                this.synth.cancel();
+            } catch (e) {
+                // Ignore
+            }
+        }
+        this.activeUtterance = null;
     }
 
     stop() {
         this.queue = [];
         this.isProcessingQueue = false;
-        clearTimeout(this.watchdogTimer);
-        if (this.synth) {
-            this.synth.cancel();
-        }
+        this.stopCurrentSpeech();
         this.cooldowns.clear();
     }
 }
