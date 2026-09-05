@@ -576,12 +576,22 @@ export default function App() {
                 const currentRisk = riskInfo.level;
                 if (lastRiskLevelRef.current === 'Alto' && currentRisk !== 'Alto') {
                     setHudRecommendation('🟢 Zona segura alcanzada. Has salido del sector de riesgo.');
-                    audioGuidance.speakEvent('danger_zone_exit', 'Has salido de la zona de riesgo. Vía segura.', 20, true);
+                    audioGuidance.speakEvent('danger_zone_exit', 'Has salido de la zona de riesgo alto. Ingresando a vía segura.', 20, true);
                 } else if (currentRisk === 'Alto' && lastRiskLevelRef.current !== 'Alto') {
                     setHudRecommendation('⚠️ Sector con alerta de seguridad. Mantente en movimiento.');
-                    audioGuidance.speakEvent('high_risk_zone', 'Zona de precaución. Mantén el pedaleo.', 35, true);
+                    audioGuidance.speakEvent('high_risk_zone', 'Atención: Ingresando a tramo con nivel de riesgo Alto. Mantén una velocidad constante, enciende tus luces y no te detengas.', 30, true);
                 }
                 lastRiskLevelRef.current = currentRisk;
+
+                // Route completion progress announcements
+                const pct = Math.round((nextIdx / denseCoords.length) * 100);
+                if (pct >= 25 && pct < 28) {
+                    audioGuidance.speakEvent('progress_25', 'Avance de ruta: Has completado el 25 por ciento de tu recorrido.', 60, false);
+                } else if (pct >= 50 && pct < 53) {
+                    audioGuidance.speakEvent('progress_50', 'Avance de ruta: Has alcanzado la mitad del camino hacia tu destino.', 60, false);
+                } else if (pct >= 75 && pct < 78) {
+                    audioGuidance.speakEvent('progress_75', 'Avance de ruta: Estás al 75 por ciento. Próximo a tu destino.', 60, false);
+                }
 
                 // Independent multi-layer evaluations (does not block other layers)
                 let newHudRec = null;
@@ -1410,10 +1420,53 @@ export default function App() {
         setCyclistIndex(0);
         setCyclistCoords(activeRoute.coordinates[0]);
 
+        // Evaluate comprehensive route risk & hazards for opening speech briefing
+        const distKm = (activeRoute.distanceKm || (activeRoute.distance / 1000) || 3.2).toFixed(1);
+        const timeMin = Math.round(activeRoute.durationMinutes || (distKm * 3.5) || 12);
+        const riskScore = (activeRoute.avgRiskScore || 2.8).toFixed(1);
+        const riskLevel = activeRoute.avgRiskScore >= 7.0 ? 'Alto' : (activeRoute.avgRiskScore >= 3.8 ? 'Medio' : 'Bajo');
+        const destName = destInput || 'tu destino';
+
+        // Count hazards along the active route
+        const routeRobberies = robberyReports.filter(r =>
+            activeRoute.coordinates.some(pt => (Math.sqrt(Math.pow(pt[0] - r.lat, 2) + Math.pow(pt[1] - r.lng, 2)) * 111000) <= 120)
+        );
+        const routeAccidents = accidentPoints.filter(a =>
+            activeRoute.coordinates.some(pt => (Math.sqrt(Math.pow(pt[0] - a.lat, 2) + Math.pow(pt[1] - a.lng, 2)) * 111000) <= 120)
+        );
+        const routeConst = constructionZones.filter(z =>
+            activeRoute.coordinates.some(pt => (Math.sqrt(Math.pow(pt[0] - z.lat, 2) + Math.pow(pt[1] - z.lng, 2)) * 111000) <= z.radius + 30)
+        );
+
+        let riskSpeech = `Iniciando viaje hacia ${destName}. Distancia estimada: ${distKm} kilómetros, tiempo aproximado: ${timeMin} minutos. Nivel de riesgo de la ruta: ${riskLevel}, con puntuación de seguridad de ${riskScore} sobre 10. `;
+
+        if (riskLevel === 'Alto') {
+            riskSpeech += `Atención: Esta ruta presenta tramos críticos. `;
+        } else if (riskLevel === 'Medio') {
+            riskSpeech += `Ruta con nivel de riesgo moderado. `;
+        } else {
+            riskSpeech += `Ruta catalogada como segura y preferencial para ciclistas. `;
+        }
+
+        if (routeRobberies.length > 0) {
+            riskSpeech += `Precaución, se registran ${routeRobberies.length} reportes de hurto en el trazado. `;
+        }
+        if (routeAccidents.length > 0) {
+            riskSpeech += `Atención a ${routeAccidents.length} zonas de siniestros viales. `;
+        }
+        if (routeConst.length > 0) {
+            riskSpeech += `Se identificaron obras viales del IDU en la vía. `;
+        }
+        if (simulationState.weather === 'lluvia') {
+            riskSpeech += `Pronóstico de lluvia activo en tu sector, calzada resbaladiza. `;
+        }
+
+        riskSpeech += `Te acompañaré durante todo el trayecto con copiloto de voz y alertas en tiempo real. ¡Buen viaje y pedalea con precaución!`;
+
         audioGuidance.playChime('start');
         setTimeout(() => {
-            audioGuidance.speak("Iniciando recorrido hacia tu destino. Te acompañaré durante el viaje con alertas de seguridad en tiempo real.", true);
-        }, 250);
+            audioGuidance.speak(riskSpeech, true);
+        }, 300);
     };
 
     // 15. Calculate active predictions and CPTED recommendations
