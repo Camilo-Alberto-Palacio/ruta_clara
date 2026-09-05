@@ -15,6 +15,7 @@ export default function ResultsPanel({
     onStartNavigation
 }) {
     const isTech = viewMode === 'tech';
+    const activeRoute = generatedRoutes.find(r => r.id === activeRouteId) || generatedRoutes[0];
 
     // Helper for risk classes
     const getRiskClass = (level) => {
@@ -128,6 +129,44 @@ export default function ResultsPanel({
                             >
                                 <i className="fa-solid fa-play text-emerald-600" style={{ fontSize: '0.65rem' }}></i> Ver Simulación Virtual
                             </button>
+                        </div>
+                    )}
+
+                    {/* Traffic Lights on Route Banner */}
+                    {hasRoute && activeRoute && activeRoute.trafficLightsCount > 0 && (
+                        <div style={{
+                            margin: '0.6rem 0',
+                            padding: '0.6rem 0.8rem',
+                            borderRadius: '0.75rem',
+                            background: '#f8fafc',
+                            border: '1px solid #e2e8f0',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: '0.5rem'
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <span style={{ fontSize: '1.15rem' }}>🚦</span>
+                                <div>
+                                    <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1e293b' }}>
+                                        {activeRoute.trafficLightsCount} Semáforos en la ruta
+                                    </div>
+                                    <div style={{ fontSize: '0.68rem', color: '#64748b' }}>
+                                        {activeRoute.greenLightsCount || 0} con onda verde ciclo-amigable
+                                    </div>
+                                </div>
+                            </div>
+                            <span style={{
+                                fontSize: '0.65rem',
+                                fontWeight: 800,
+                                padding: '0.2rem 0.5rem',
+                                borderRadius: '9999px',
+                                background: 'rgba(16, 185, 129, 0.1)',
+                                color: '#059669',
+                                border: '1px solid rgba(16, 185, 129, 0.25)'
+                            }}>
+                                Activos
+                            </span>
                         </div>
                     )}
 

@@ -18,6 +18,7 @@ import { accidentPoints } from './data/accidentPoints';
 import { caiPoints } from './data/caiPoints';
 import { fetchBogotaTrafficLights } from './utils/trafficLightsService';
 import { audioGuidance } from './utils/audioGuidanceService';
+import { wakeLockService } from './utils/wakeLockService';
 import { fetchBogotaWeather } from './utils/weatherService';
 import { calculateRouteElevationProfile } from './utils/elevationService';
 import SafeHavenEmergencyModal from './components/molecules/SafeHavenEmergencyModal';
@@ -75,7 +76,7 @@ export default function App() {
         robberies: false,
         trafficJams: true,
         citizenReports: true,
-        trafficLights: false,
+        trafficLights: true,
         caravans: false
     });
 
@@ -152,6 +153,18 @@ export default function App() {
     useEffect(() => {
         loadTrafficLightsData(false);
 
+        // Mantener la pantalla encendida (Android y navegadores web)
+        wakeLockService.requestWakeLock();
+
+        // Desbloquear audio en dispositivos móviles al primer toque/clic
+        const handleUserGestureUnlock = () => {
+            audioGuidance.unlockAudio();
+            window.removeEventListener('click', handleUserGestureUnlock);
+            window.removeEventListener('touchstart', handleUserGestureUnlock);
+        };
+        window.addEventListener('click', handleUserGestureUnlock);
+        window.addEventListener('touchstart', handleUserGestureUnlock);
+
         // Cargar clima real de Bogotá
         fetchBogotaWeather().then(w => {
             if (w) {
@@ -161,6 +174,11 @@ export default function App() {
                 }
             }
         });
+
+        return () => {
+            window.removeEventListener('click', handleUserGestureUnlock);
+            window.removeEventListener('touchstart', handleUserGestureUnlock);
+        };
     }, []);
 
     // Auto-detect user GPS location on start to set as default origin
@@ -458,25 +476,31 @@ export default function App() {
 
             const currentPt = denseCoords[currIdx];
 
-            // Detect next traffic light
+            // Detect next traffic light within 65m corridor
             const nearbyLight = trafficLightsRef.current.find(light => {
                 const distDeg = Math.sqrt(
                     Math.pow(currentPt[0] - light.coordinates[0], 2) + 
                     Math.pow(currentPt[1] - light.coordinates[1], 2)
                 );
-                return (distDeg * 111000) <= 30;
+                return (distDeg * 111000) <= 65;
             });
 
             if (nearbyLight) {
                 setNextTrafficLight(nearbyLight);
                 if (nearbyLight.state === 'rojo') {
                     setSpeedKmh(0);
-                    setHudRecommendation('🚦 Semáforo en ROJO. Esperando cambio a verde...');
-                    audioGuidance.speakEvent(`light_${nearbyLight.coordinates.join('_')}`, 'Semáforo en rojo.', 35, true);
+                    setHudRecommendation(`🚦 Semáforo en ROJO en ${nearbyLight.intersection || 'intersección'}. Detén la marcha.`);
+                    audioGuidance.speakEvent(`light_red_${nearbyLight.id || nearbyLight.intersection}`, 'Atención, semáforo en rojo. Detén la marcha.', 20, true);
                     waitTicks++;
                     if (waitTicks < 6) {
                         return; // pause cyclist progression temporarily
                     }
+                } else if (nearbyLight.state === 'verde') {
+                    setHudRecommendation(`🟢 Semáforo en VERDE en ${nearbyLight.intersection || 'intersección'}. Cruce libre.`);
+                    audioGuidance.speakEvent(`light_green_${nearbyLight.id || nearbyLight.intersection}`, 'Semáforo en verde. Cruce libre.', 25, false);
+                } else if (nearbyLight.state === 'amarillo') {
+                    setHudRecommendation(`🟡 Semáforo en AMARILLO en ${nearbyLight.intersection || 'intersección'}. Precaución.`);
+                    audioGuidance.speakEvent(`light_yellow_${nearbyLight.id || nearbyLight.intersection}`, 'Semáforo en amarillo. Precaución.', 25, true);
                 }
             } else {
                 setNextTrafficLight(null);
@@ -588,6 +612,10 @@ export default function App() {
                     audioGuidance.speakEvent('rain_warning', 'Calzada resbaladiza por lluvia.', 90);
                 } else if (nearbyLight && nearbyLight.state === 'verde') {
                     setHudRecommendation('🟢 Cruce con semáforo en VERDE. Paso libre.');
+                    audioGuidance.speakEvent(`light_green_${nearbyLight.id || nearbyLight.coordinates.join('_')}`, 'Semáforo en verde. Cruce libre.', 25, false);
+                } else if (nearbyLight && nearbyLight.state === 'rojo') {
+                    setHudRecommendation('🔴 Semáforo en ROJO en la intersección.');
+                    audioGuidance.speakEvent(`light_red_${nearbyLight.id || nearbyLight.coordinates.join('_')}`, 'Semáforo en rojo.', 20, true);
                 } else {
                     setHudRecommendation('🚴 Ruta despejada. Disfruta tu recorrido.');
                 }
@@ -1137,6 +1165,18 @@ export default function App() {
                 routeName = `Ruta ${idx + 1} (Directa)`;
             }
             
+            // Calcular semáforos presentes a lo largo de esta ruta
+            const lightsOnRoute = (trafficLights || []).filter(light => {
+                return leafletCoords.some(pt => {
+                    const distDeg = Math.sqrt(
+                        Math.pow(pt[0] - light.coordinates[0], 2) + 
+                        Math.pow(pt[1] - light.coordinates[1], 2)
+                    );
+                    return (distDeg * 111000) <= 80;
+                });
+            });
+            const greenCount = lightsOnRoute.filter(l => l.state === 'verde').length;
+
             return {
                 id: `route_${idx}`,
                 name: routeName,
@@ -1150,7 +1190,10 @@ export default function App() {
                 maxRiskLevel: riskDetails.maxLevel,
                 trafficJamsOnRoute: jamsOnRoute,
                 totalDelayMinutes: totalDelayMinutes,
-                cost: routeCost.toFixed(1)
+                cost: routeCost.toFixed(1),
+                trafficLightsCount: lightsOnRoute.length,
+                greenLightsCount: greenCount,
+                trafficLightsOnRoute: lightsOnRoute
             };
         });
 
@@ -1250,6 +1293,10 @@ export default function App() {
     const handleStartNavigation = (mode = 'simulated') => {
         const activeRoute = generatedRoutes.find(r => r.id === activeRouteId);
         if (!activeRoute) return;
+
+        audioGuidance.unlockAudio();
+        wakeLockService.requestWakeLock();
+
         setNavigationMode(mode);
         setIsNavigating(true);
         setNavStatus('running');
@@ -1257,7 +1304,11 @@ export default function App() {
         cyclistIndexRef.current = 0;
         setCyclistIndex(0);
         setCyclistCoords(activeRoute.coordinates[0]);
-        audioGuidance.speak("Iniciando recorrido hacia tu destino. Te acompañaré durante el viaje con alertas de seguridad en tiempo real.", true);
+
+        audioGuidance.playChime('start');
+        setTimeout(() => {
+            audioGuidance.speak("Iniciando recorrido hacia tu destino. Te acompañaré durante el viaje con alertas de seguridad en tiempo real.", true);
+        }, 250);
     };
 
     // 15. Calculate active predictions and CPTED recommendations
@@ -1634,6 +1685,7 @@ export default function App() {
                             setSpeedKmh(0);
                             setNextTrafficLight(null);
                             audioGuidance.stop();
+                            wakeLockService.releaseWakeLock();
                         }}
                         className="w-10 h-10 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center shadow-md cursor-pointer border-none transition-all ml-1"
                         title="Finalizar viaje"

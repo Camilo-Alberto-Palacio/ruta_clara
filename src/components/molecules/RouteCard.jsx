@@ -51,6 +51,18 @@ export default function RouteCard({
                     <span>Pendiente: {route.elevationProfile.avgSlopePercent}%</span>
                 </div>
             )}
+            {route.trafficLightsCount !== undefined && route.trafficLightsCount > 0 && (
+                <div className="flex items-center justify-between text-[11px] text-slate-600 font-semibold my-1 px-1.5 py-0.5 rounded bg-slate-50 border border-slate-200">
+                    <span className="flex items-center gap-1">
+                        <span>🚦</span> {route.trafficLightsCount} semáforos en ruta
+                    </span>
+                    {route.greenLightsCount !== undefined && (
+                        <span className="text-emerald-700 font-bold text-[10px]">
+                            {route.greenLightsCount} en verde
+                        </span>
+                    )}
+                </div>
+            )}
             <div className="route-card-risk">
                 <span className="route-card-meta">Riesgo Promedio:</span>
                 <span className={riskClass}>{route.avgRiskScore} ({riskText})</span>

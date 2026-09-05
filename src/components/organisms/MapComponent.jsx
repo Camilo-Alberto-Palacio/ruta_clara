@@ -1266,10 +1266,17 @@ export default function MapComponent({
         });
         trafficLightLayersRef.current = [];
 
-        if (mapLayers.trafficLights === false) return;
+        // Always show traffic lights if mapLayers.trafficLights is true OR if there's an active route
+        if (mapLayers.trafficLights === false && (!activeRouteCoords || activeRouteCoords.length === 0)) return;
 
         trafficLights.forEach(light => {
-            if (!shouldShowMarker(light.coordinates[0], light.coordinates[1], activeRouteCoords, currentZoom, 11, 800)) return;
+            const onRoute = activeRouteCoords && activeRouteCoords.length > 0 && isNearRoute(light.coordinates[0], light.coordinates[1], activeRouteCoords, 100);
+
+            // If not directly on route, check layer setting and zoom threshold
+            if (!onRoute) {
+                if (mapLayers.trafficLights === false) return;
+                if (!shouldShowMarker(light.coordinates[0], light.coordinates[1], null, currentZoom, 13, 100)) return;
+            }
 
             const lightColor = light.state === 'verde' ? '#10b981' : (light.state === 'amarillo' ? '#eab308' : '#ef4444');
 
@@ -1278,46 +1285,65 @@ export default function MapComponent({
                     className: 'traffic-light-marker-wrapper',
                     html: `
                         <div style="
-                            width: 16px;
-                            height: 16px;
-                            background: #ffffff;
-                            border: 1.5px solid #10b981;
-                            border-radius: 50%;
                             display: flex;
+                            flex-direction: column;
                             align-items: center;
-                            justify-content: center;
-                            box-shadow: 0 2px 5px rgba(16, 185, 129, 0.25);
+                            justify-content: space-evenly;
+                            width: ${onRoute ? '20px' : '16px'};
+                            height: ${onRoute ? '34px' : '28px'};
+                            background: #0f172a;
+                            border: ${onRoute ? '2px solid #10b981' : '1.5px solid #475569'};
+                            border-radius: 8px;
+                            box-shadow: ${onRoute ? '0 0 12px rgba(16, 185, 129, 0.6), 0 3px 8px rgba(0,0,0,0.4)' : '0 2px 5px rgba(0,0,0,0.3)'};
+                            padding: 2px 0;
                             cursor: pointer;
                         ">
                             <span style="
-                                width: 6px; 
-                                height: 6px; 
+                                width: ${onRoute ? '6px' : '5px'}; 
+                                height: ${onRoute ? '6px' : '5px'}; 
                                 border-radius: 50%; 
-                                background: ${lightColor}; 
-                                box-shadow: 0 0 5px ${lightColor};
+                                background: ${light.state === 'rojo' ? '#ef4444' : '#334155'}; 
+                                box-shadow: ${light.state === 'rojo' ? '0 0 8px #ef4444' : 'none'};
+                            "></span>
+                            <span style="
+                                width: ${onRoute ? '6px' : '5px'}; 
+                                height: ${onRoute ? '6px' : '5px'}; 
+                                border-radius: 50%; 
+                                background: ${light.state === 'amarillo' ? '#eab308' : '#334155'}; 
+                                box-shadow: ${light.state === 'amarillo' ? '0 0 8px #eab308' : 'none'};
+                            "></span>
+                            <span style="
+                                width: ${onRoute ? '6px' : '5px'}; 
+                                height: ${onRoute ? '6px' : '5px'}; 
+                                border-radius: 50%; 
+                                background: ${light.state === 'verde' ? '#10b981' : '#334155'}; 
+                                box-shadow: ${light.state === 'verde' ? '0 0 8px #10b981' : 'none'};
                             "></span>
                         </div>
                     `,
-                    iconSize: [16, 16],
-                    iconAnchor: [8, 8]
+                    iconSize: onRoute ? [20, 34] : [16, 28],
+                    iconAnchor: onRoute ? [10, 17] : [8, 14]
                 })
             });
 
             const popupContent = `
-                <div style="color: #f8fafc; font-family: var(--font-body); font-size: 0.78rem; padding: 0.25rem; min-width: 180px;">
-                    <h4 style="font-family: var(--font-heading); font-size: 0.85rem; font-weight: 700; margin-bottom: 0.35rem; color: #cbd5e1; display: flex; align-items: center; gap: 0.35rem;">
-                        <i class="fa-solid fa-traffic-light"></i> ${light.name}
-                    </h4>
-                    <p style="margin: 0 0 0.4rem 0; font-weight: 600; color: #f1f5f9;">Semáforo de Intersección</p>
-                    <p style="margin: 0 0 0.4rem 0; font-size: 0.7rem; color: #94a3b8;"><b>Intersección:</b> ${light.intersection}</p>
-                    <p style="margin: 0; font-size: 0.72rem; color: ${lightColor}; font-weight: 700;">
-                        Estado actual: ${light.state.toUpperCase()}
+                <div style="color: #f8fafc; font-family: var(--font-body); font-size: 0.78rem; padding: 0.25rem; min-width: 190px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.35rem;">
+                        <h4 style="font-family: var(--font-heading); font-size: 0.85rem; font-weight: 700; margin: 0; color: #cbd5e1; display: flex; align-items: center; gap: 0.35rem;">
+                            <i class="fa-solid fa-traffic-light" style="color: ${lightColor};"></i> ${light.name}
+                        </h4>
+                    </div>
+                    ${onRoute ? '<span style="display: inline-block; background: rgba(16,185,129,0.2); color: #10b981; font-weight: 800; font-size: 0.68rem; padding: 2px 6px; border-radius: 4px; margin-bottom: 0.4rem; border: 1px solid #10b981;">🚦 En tu ruta ciclista</span>' : ''}
+                    <p style="margin: 0 0 0.3rem 0; font-size: 0.72rem; color: #94a3b8;"><b>Cruce:</b> ${light.intersection}</p>
+                    <p style="margin: 0 0 0.3rem 0; font-size: 0.72rem; color: #94a3b8;"><b>Tipo:</b> ${light.type === 'vehicular_ciclista' ? '🚴 Ciclista y Vehicular' : 'Vehicular'}</p>
+                    <p style="margin: 0; font-size: 0.74rem; color: ${lightColor}; font-weight: 700;">
+                        Estado actual: ${light.state.toUpperCase()} (${light.cycleTime || 30}s ciclo)
                     </p>
                 </div>
             `;
 
             marker.bindPopup(popupContent, { className: 'custom-leaflet-popup' });
-            marker.bindTooltip(`<strong>Semáforo:</strong> ${light.intersection} (${light.state})`, { sticky: true, className: 'custom-tooltip' });
+            marker.bindTooltip(`<strong>🚦 Semáforo:</strong> ${light.intersection} <span style="color:${lightColor}">(${light.state.toUpperCase()})</span>`, { sticky: true, className: 'custom-tooltip' });
 
             marker.addTo(map);
             trafficLightLayersRef.current.push(marker);
