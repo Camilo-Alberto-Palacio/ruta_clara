@@ -1,11 +1,11 @@
 /**
- * Audio Guidance & Voice Copilot Service (Waze-style Copilot) for Ruta Clara
- * Provides natural, fluent, professional Spanish voice guidance for turns,
- * maneuvers, safety alerts, and traffic signals.
+ * Audio Guidance & Voice Copilot Service (Waze-style Voice Copilot) for Ruta Clara
+ * Provides 100% natural, fluent, professional Spanish spoken voice guidance
+ * with ZERO synthetic beeps or pitidos.
  * 
- * Uses @capacitor-community/text-to-speech on native Android devices with category 'playback'
- * and dynamic language negotiation (es-CO -> es-419 -> es-MX -> es-US -> es-ES -> es),
- * with immediate fallback to Web Speech API and Web Audio API harmonic chimes.
+ * Uses @capacitor-community/text-to-speech on native Android devices with category 'playback',
+ * dynamic Spanish locale detection, strict watchdog timeout protection to prevent queue locks,
+ * and seamless fallback to Web Speech API.
  */
 
 import { TextToSpeech } from '@capacitor-community/text-to-speech';
@@ -19,16 +19,17 @@ class AudioGuidanceService {
         this.synth = typeof window !== 'undefined' && 'speechSynthesis' in window ? window.speechSynthesis : null;
         this.cooldowns = new Map(); // eventKey -> timestamp
         this.lastSpokenTime = 0;
-        this.minGlobalIntervalMs = 3500; // 3.5s minimum gap between non-urgent prompts
+        this.minGlobalIntervalMs = 3000; // 3.0s minimum gap between non-urgent voice prompts
         this.selectedVoice = null;
         this.availableVoices = [];
-        this.activeUtterance = null; // Prevent Chromium garbage collection bug
+        this.activeUtterance = null;
         this.isAudioUnlocked = false;
         this.detectedNativeLang = null;
 
-        // Queue
+        // Queue & execution lock
         this.queue = [];
         this.isProcessingQueue = false;
+        this.queueWatchdog = null;
 
         if (this.synth) {
             this.refreshVoices();
@@ -37,7 +38,7 @@ class AudioGuidanceService {
             }
         }
 
-        // Auto-unlock audio on any mobile touch/click gesture
+        // Auto-unlock audio on any user touch/gesture
         if (typeof window !== 'undefined') {
             const autoUnlock = () => this.unlockAudio();
             ['touchstart', 'touchend', 'pointerdown', 'click', 'keydown'].forEach(evt => {
@@ -47,7 +48,7 @@ class AudioGuidanceService {
     }
 
     /**
-     * Unlocks audio contexts on mobile / Android upon user interaction
+     * Unlocks speech synthesis on mobile / Android upon user interaction
      */
     unlockAudio() {
         if (this.isAudioUnlocked) return;
@@ -60,11 +61,10 @@ class AudioGuidanceService {
                 // Ignore resume errors
             }
         }
-        soundService.ensureContext();
     }
 
     /**
-     * Detects best available Spanish language code supported by the native device
+     * Detects best available Spanish language code supported by the native Android device
      */
     async getBestNativeLanguage() {
         if (this.detectedNativeLang) return this.detectedNativeLang;
@@ -146,14 +146,13 @@ class AudioGuidanceService {
 
     setEnabled(val) {
         this.enabled = val;
-        soundService.setEnabled(val);
         if (!val) {
             this.stop();
         }
     }
 
     /**
-     * Direct speak method (Waze style, immediate and natural)
+     * Direct speak method (Waze style, immediate and natural Spanish speech)
      */
     speak(text, isPriority = false) {
         this.speakRaw(text, isPriority);
@@ -197,7 +196,7 @@ class AudioGuidanceService {
     enqueueMessage(text, isPriority) {
         this.unlockAudio();
 
-        // Clean emojis, markdown symbols, and unnecessary symbols for crisp human speech
+        // Clean emojis, markdown symbols, and technical syntax for pure, fluent human speech
         const cleanText = text
             .replace(/[\p{Extended_Pictographic}\uFE0F]/gu, '')
             .replace(/[•*#_~`[\]()]/g, ' ')
@@ -206,11 +205,11 @@ class AudioGuidanceService {
 
         if (!cleanText) return;
 
-        // Play navigation earcon cue & mobile vibration
+        // Silent physical vibration on mobile (NO audible pitidos)
         if (isPriority) {
-            soundService.playNotification('alert');
-        } else if (cleanText.toLowerCase().includes('gira') || cleanText.toLowerCase().includes('metros') || cleanText.toLowerCase().includes('continúa')) {
-            soundService.playNotification('turn');
+            soundService.vibrate([100, 50, 100]);
+        } else if (cleanText.toLowerCase().includes('gira') || cleanText.toLowerCase().includes('metros')) {
+            soundService.vibrate([70]);
         }
 
         const item = { text: cleanText, isPriority };
@@ -220,7 +219,7 @@ class AudioGuidanceService {
             this.queue.unshift(item);
             this.stopCurrentSpeech();
         } else {
-            // Avoid queuing identical consecutive phrases
+            // Avoid duplicate consecutive phrases in queue
             if (this.queue.length === 0 || this.queue[this.queue.length - 1].text !== cleanText) {
                 this.queue.push(item);
             }
@@ -235,35 +234,55 @@ class AudioGuidanceService {
         this.isProcessingQueue = true;
         const current = this.queue.shift();
 
+        // Calculate expected duration based on word count (approx 200 words/min = 3.3 words/sec)
+        const wordCount = current.text.split(/\s+/).length;
+        const estimatedDurationMs = Math.max(2500, Math.min(12000, (wordCount * 450) + 1500));
+
+        // Global safety watchdog to guarantee queue lock is ALWAYS released
+        if (this.queueWatchdog) clearTimeout(this.queueWatchdog);
+        this.queueWatchdog = setTimeout(() => {
+            if (this.isProcessingQueue) {
+                console.warn('Voice Copilot watchdog: force releasing queue lock');
+                this.isProcessingQueue = false;
+                this.processQueue();
+            }
+        }, estimatedDurationMs + 1000);
+
         try {
             // 1. If running on native Android APK, use native Android TTS with playback category
             if (this.isNative) {
                 let nativeSuccess = false;
                 try {
                     const langToUse = await this.getBestNativeLanguage();
-                    await TextToSpeech.speak({
-                        text: current.text,
-                        lang: langToUse,
-                        rate: 1.02,
-                        pitch: 1.0,
-                        volume: 1.0,
-                        category: 'playback'
-                    });
+                    
+                    // Race TextToSpeech against duration timeout so broken onDone callbacks in Android NEVER hang
+                    await Promise.race([
+                        TextToSpeech.speak({
+                            text: current.text,
+                            lang: langToUse,
+                            rate: 1.05,
+                            pitch: 1.0,
+                            volume: 1.0,
+                            category: 'playback'
+                        }),
+                        new Promise(resolve => setTimeout(resolve, estimatedDurationMs))
+                    ]);
                     nativeSuccess = true;
                 } catch (nativeErr) {
-                    console.warn('Native Android TTS speak failed, trying Web Speech fallback:', nativeErr);
+                    console.warn('Native Android TTS error, attempting Web Speech fallback:', nativeErr);
                 }
 
                 if (nativeSuccess) {
+                    if (this.queueWatchdog) clearTimeout(this.queueWatchdog);
                     this.isProcessingQueue = false;
                     setTimeout(() => this.processQueue(), 250);
                     return;
                 }
-                // Fallthrough to Web Speech API fallback if native rejected or failed
             }
 
-            // 2. Web Browser or Fallback with Web Speech API
+            // 2. Web Browser or Fallback using Web Speech API
             if (!this.synth) {
+                if (this.queueWatchdog) clearTimeout(this.queueWatchdog);
                 this.isProcessingQueue = false;
                 return;
             }
@@ -275,9 +294,8 @@ class AudioGuidanceService {
             this.refreshVoices();
 
             const utterance = new SpeechSynthesisUtterance(current.text);
-            this.activeUtterance = utterance; // Prevent garbage collection bug
+            this.activeUtterance = utterance;
 
-            // Language & voice selection
             if (this.selectedVoice) {
                 utterance.voice = this.selectedVoice;
                 utterance.lang = this.selectedVoice.lang;
@@ -285,31 +303,22 @@ class AudioGuidanceService {
                 utterance.voice = this.availableVoices[0];
                 utterance.lang = this.availableVoices[0].lang;
             } else {
-                utterance.lang = 'es-ES'; // Safe default
+                utterance.lang = 'es-ES';
             }
 
-            utterance.rate = 1.02; // Natural, confident Waze-like cadence
+            utterance.rate = 1.02;
             utterance.pitch = 1.0;
             utterance.volume = 1.0;
 
-            let safetyTimer = setTimeout(() => {
-                if (this.synth && this.synth.speaking) {
-                    this.synth.cancel();
-                }
-                this.activeUtterance = null;
-                this.isProcessingQueue = false;
-                this.processQueue();
-            }, 8000);
-
             utterance.onend = () => {
-                clearTimeout(safetyTimer);
+                if (this.queueWatchdog) clearTimeout(this.queueWatchdog);
                 this.activeUtterance = null;
                 this.isProcessingQueue = false;
                 setTimeout(() => this.processQueue(), 200);
             };
 
             utterance.onerror = (e) => {
-                clearTimeout(safetyTimer);
+                if (this.queueWatchdog) clearTimeout(this.queueWatchdog);
                 console.warn('SpeechSynthesis note:', e.error || e);
                 this.activeUtterance = null;
                 this.isProcessingQueue = false;
@@ -320,6 +329,7 @@ class AudioGuidanceService {
 
         } catch (err) {
             console.warn('AudioGuidance speak error:', err);
+            if (this.queueWatchdog) clearTimeout(this.queueWatchdog);
             this.activeUtterance = null;
             this.isProcessingQueue = false;
             setTimeout(() => this.processQueue(), 250);
@@ -345,6 +355,10 @@ class AudioGuidanceService {
     }
 
     stop() {
+        if (this.queueWatchdog) {
+            clearTimeout(this.queueWatchdog);
+            this.queueWatchdog = null;
+        }
         this.queue = [];
         this.isProcessingQueue = false;
         this.stopCurrentSpeech();

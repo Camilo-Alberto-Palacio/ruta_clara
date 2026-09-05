@@ -1796,9 +1796,8 @@ export default function App() {
                             const nextVal = !voiceEnabled;
                             setVoiceEnabled(nextVal);
                             if (nextVal) {
-                                soundService.playNotification('success');
-                                audioGuidance.speakRaw("Voz y sonido activados.");
-                                showToast("🔊 Asistente de voz y sonido activados", "success");
+                                audioGuidance.speakRaw("Voz activada.");
+                                showToast("🔊 Asistente de voz activado", "success");
                             } else {
                                 audioGuidance.stop();
                                 showToast("🔇 Asistente de voz silenciado", "info");
@@ -1814,17 +1813,16 @@ export default function App() {
                         <i className={`fa-solid ${voiceEnabled ? 'fa-volume-high text-sm' : 'fa-volume-xmark text-sm'}`}></i>
                     </button>
 
-                    {/* Test Audio Chime & Voice button */}
+                    {/* Test Voice Assistant button */}
                     <button
                         onClick={() => {
-                            soundService.playNotification('alert');
-                            audioGuidance.speakRaw("Probando notificaciones de audio en tu teléfono. Sistema operativo y altavoz vinculados correctamente.");
-                            showToast("🔔 Probando sonido y notificaciones...", "info");
+                            audioGuidance.speakRaw("Asistente de voz de Ruta Clara funcionando correctamente.");
+                            showToast("🗣️ Probando voz del asistente...", "info");
                         }}
                         className="w-10 h-10 rounded-full bg-slate-100 text-slate-700 hover:bg-slate-200 flex items-center justify-center cursor-pointer border-none transition-all"
-                        title="Probar sonido y notificaciones"
+                        title="Probar asistente de voz"
                     >
-                        <i className="fa-solid fa-bell text-xs"></i>
+                        <i className="fa-solid fa-volume-high text-xs"></i>
                     </button>
 
                     {/* Change Voice button */}
@@ -1837,10 +1835,8 @@ export default function App() {
                                 const nextIdx = (currIdx + 1) % voices.length;
                                 const nextVoice = voices[nextIdx];
                                 audioGuidance.setVoice(nextVoice.uri);
-                                soundService.playNotification('turn');
                                 audioGuidance.speakRaw(`Voz ${nextVoice.name}.`);
                             } else {
-                                soundService.playNotification('turn');
                                 audioGuidance.speakRaw("Voz en español seleccionada.");
                             }
                         }}
