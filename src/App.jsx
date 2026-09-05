@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import FloatingHeader from './components/organisms/FloatingHeader';
 import RoutePlanner from './components/organisms/RoutePlanner';
 import SimulatorPanel from './components/organisms/SimulatorPanel';
@@ -66,17 +66,17 @@ export default function App() {
         accidents: false
     });
 
-    // Map Layers Visibility State (All layers active for complete data richness)
+    // Map Layers Visibility State (Optimized defaults for mobile fluidity)
     const [mapLayers, setMapLayers] = useState({
         localities: true,
         cais: true,
-        construction: true,
-        accidents: true,
-        robberies: true,
+        construction: false,
+        accidents: false,
+        robberies: false,
         trafficJams: true,
         citizenReports: true,
-        trafficLights: true,
-        caravans: true
+        trafficLights: false,
+        caravans: false
     });
 
     const [desktopLayersOpen, setDesktopLayersOpen] = useState(false);
@@ -163,6 +163,31 @@ export default function App() {
         });
     }, []);
 
+    // Auto-detect user GPS location on start to set as default origin
+    useEffect(() => {
+        if (!navigator.geolocation) {
+            const fallback = localidad === 'usme' ? { lat: 4.5317, lng: -74.1166 } : { lat: 4.5631, lng: -74.1128 };
+            setRoutePoints(prev => ({ ...prev, origin: fallback }));
+            return;
+        }
+
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+                setUserLocation(coords);
+                setRoutePoints(prev => ({ ...prev, origin: coords }));
+                setOriginInput('📍 Tu ubicación actual');
+            },
+            (err) => {
+                console.warn("Geolocalización automática por defecto:", err.message);
+                const fallback = localidad === 'usme' ? { lat: 4.5317, lng: -74.1166 } : { lat: 4.5631, lng: -74.1128 };
+                setRoutePoints(prev => ({ ...prev, origin: fallback }));
+                setOriginInput(localidad === 'usme' ? 'Portal Usme' : 'Molinos');
+            },
+            { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
+        );
+    }, []);
+
     // 3D Navigation Simulator State
     const [isNavigating, setIsNavigating] = useState(false);
     const [navigationMode, setNavigationMode] = useState('simulated'); // 'simulated' | 'gps'
@@ -174,6 +199,8 @@ export default function App() {
     const [speedKmh, setSpeedKmh] = useState(0);
     const [hudRecommendation, setHudRecommendation] = useState('Haz clic en Iniciar para comenzar la navegación.');
     const [nextTrafficLight, setNextTrafficLight] = useState(null);
+    const [isCameraLocked, setIsCameraLocked] = useState(true);
+    const cyclistIndexRef = useRef(0);
     const lastRiskLevelRef = useRef('Bajo');
 
     // Mobile popover states and bottom sheet active tab
@@ -193,7 +220,8 @@ export default function App() {
     const [zoomToCoords, setZoomToCoords] = useState(null);
 
     // 4. Route Planning State
-    const [originInput, setOriginInput] = useState('Portal Usme');
+    const [userLocation, setUserLocation] = useState(null);
+    const [originInput, setOriginInput] = useState('📍 Tu ubicación actual');
     const [destInput, setDestInput] = useState('');
     const [selectingLocationMode, setSelectingLocationMode] = useState(null);
     const [routePoints, setRoutePoints] = useState({ origin: null, destination: null });
@@ -220,24 +248,6 @@ export default function App() {
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
     }, []);
-
-    // Sync body class list for dark mode
-    useEffect(() => {
-        if (darkMode) {
-            document.body.classList.add('dark-mode');
-        } else {
-            document.body.classList.remove('dark-mode');
-        }
-    }, [darkMode]);
-
-    // Sync darkMode with mapStyle
-    useEffect(() => {
-        if (mapStyle === 'dark') {
-            setDarkMode(true);
-        } else {
-            setDarkMode(false);
-        }
-    }, [mapStyle]);
 
     // Atajos de teclado globales (Heurística 3 y 7: Control del usuario y flexibilidad)
     useEffect(() => {
@@ -366,20 +376,19 @@ export default function App() {
         audioGuidance.setEnabled(voiceEnabled);
     }, [voiceEnabled]);
 
-    // D. Smooth Continuous Navigation Simulation loop
-    useEffect(() => {
-        const activeRoute = generatedRoutes.find(r => r.id === activeRouteId);
-        if (navStatus !== 'running' || !activeRoute || navigationMode === 'gps') return;
+    const activeRoute = generatedRoutes.find(r => r.id === activeRouteId);
 
-        // Generate dense interpolated points (spaced ~6m apart) for silky smooth movement
+    // Precalculate dense interpolated points (~6m apart) ONCE when active route changes
+    const denseCoords = useMemo(() => {
+        if (!activeRoute || !activeRoute.coordinates || activeRoute.coordinates.length < 2) return [];
         const rawCoords = activeRoute.coordinates;
-        const denseCoords = [];
+        const dense = [];
         const stepDeg = 6 / 111000; // ~6 meters per step
 
         for (let i = 0; i < rawCoords.length - 1; i++) {
             const p1 = rawCoords[i];
             const p2 = rawCoords[i + 1];
-            denseCoords.push(p1);
+            dense.push(p1);
 
             const dLat = p2[0] - p1[0];
             const dLng = p2[1] - p1[1];
@@ -389,24 +398,57 @@ export default function App() {
                 const steps = Math.floor(dist / stepDeg);
                 for (let s = 1; s <= steps; s++) {
                     const frac = s / (steps + 1);
-                    denseCoords.push([
+                    dense.push([
                         p1[0] + dLat * frac,
                         p1[1] + dLng * frac
                     ]);
                 }
             }
         }
-        denseCoords.push(rawCoords[rawCoords.length - 1]);
+        dense.push(rawCoords[rawCoords.length - 1]);
+        return dense;
+    }, [activeRouteId, generatedRoutes]);
+
+    const trafficLightsRef = useRef(trafficLights);
+    trafficLightsRef.current = trafficLights;
+
+    const segmentsRef = useRef(segments);
+    segmentsRef.current = segments;
+
+    const simulationStateRef = useRef(simulationState);
+    simulationStateRef.current = simulationState;
+
+    const constructionZonesRef = useRef(constructionZones);
+    constructionZonesRef.current = constructionZones;
+
+    const citizenReportsRef = useRef(citizenReports);
+    citizenReportsRef.current = citizenReports;
+
+    const robberyReportsRef = useRef(robberyReports);
+    robberyReportsRef.current = robberyReports;
+
+    const accidentPointsRef = useRef(accidentPoints);
+    accidentPointsRef.current = accidentPoints;
+
+    const caiPointsRef = useRef(caiPoints);
+    caiPointsRef.current = caiPoints;
+
+    // D. Smooth Continuous Navigation Simulation loop (Ultra-optimized for mobile 60fps)
+    useEffect(() => {
+        if (navStatus !== 'running' || denseCoords.length < 2 || navigationMode === 'gps') return;
 
         let waitTicks = 0;
 
         const interval = setInterval(() => {
-            if (cyclistIndex >= denseCoords.length - 1) {
+            const currIdx = cyclistIndexRef.current;
+            if (currIdx >= denseCoords.length - 1) {
                 // Simulation ended successfully
                 setNavStatus('stopped');
                 setIsNavigating(false);
+                setIsCameraLocked(true);
                 setCyclistCoords(null);
                 setCyclistIndex(0);
+                cyclistIndexRef.current = 0;
                 setSpeedKmh(0);
                 setNextTrafficLight(null);
                 audioGuidance.speakRaw("¡Felicidades! Has llegado a tu destino.", true);
@@ -414,10 +456,10 @@ export default function App() {
                 return;
             }
 
-            const currentPt = denseCoords[cyclistIndex];
+            const currentPt = denseCoords[currIdx];
 
             // Detect next traffic light
-            const nearbyLight = trafficLights.find(light => {
+            const nearbyLight = trafficLightsRef.current.find(light => {
                 const distDeg = Math.sqrt(
                     Math.pow(currentPt[0] - light.coordinates[0], 2) + 
                     Math.pow(currentPt[1] - light.coordinates[1], 2)
@@ -442,7 +484,8 @@ export default function App() {
 
             waitTicks = 0;
 
-            const nextIdx = cyclistIndex + 1;
+            const nextIdx = currIdx + 1;
+            cyclistIndexRef.current = nextIdx;
             setCyclistIndex(nextIdx);
             setCyclistCoords(denseCoords[nextIdx]);
 
@@ -466,45 +509,40 @@ export default function App() {
             const variance = Math.sin(nextIdx * 0.2) * 2.5;
             setSpeedKmh(Math.round(baseSpeed + variance));
 
-            // Dynamic recommendations & Voice Copilot periodically (every 5 steps = ~30m)
-            if (nextIdx % 5 === 0) {
+            // Dynamic recommendations & Voice Copilot periodically (every 8 steps = ~50m)
+            if (nextIdx % 8 === 0) {
                 const currentCoord = denseCoords[nextIdx];
                 const riskInfo = evaluateCoordinateRisk(
                     currentCoord[0], 
                     currentCoord[1], 
-                    segments, 
-                    simulationState, 
-                    constructionZones, 
-                    simulationState.showConstruction,
-                    citizenReports
+                    segmentsRef.current, 
+                    simulationStateRef.current, 
+                    constructionZonesRef.current, 
+                    simulationStateRef.current?.showConstruction,
+                    citizenReportsRef.current
                 );
 
-                // 1. Detect nearby robbery/crime reports within 100 meters
-                const nearbyRobbery = robberyReports.find(r => {
+                const nearbyRobbery = robberyReportsRef.current.find(r => {
                     const distDeg = Math.sqrt(Math.pow(currentCoord[0] - r.lat, 2) + Math.pow(currentCoord[1] - r.lng, 2));
                     return (distDeg * 111000) <= 100;
                 });
 
-                // 2. Detect nearby traffic accidents within 100 meters
-                const nearbyAccident = accidentPoints.find(a => {
+                const nearbyAccident = accidentPointsRef.current.find(a => {
                     const distDeg = Math.sqrt(Math.pow(currentCoord[0] - a.lat, 2) + Math.pow(currentCoord[1] - a.lng, 2));
                     return (distDeg * 111000) <= 100;
                 });
 
-                // 3. Detect nearby police CAI within 90 meters
-                const nearbyCai = caiPoints.find(c => {
+                const nearbyCai = caiPointsRef.current.find(c => {
                     const distDeg = Math.sqrt(Math.pow(currentCoord[0] - c.lat, 2) + Math.pow(currentCoord[1] - c.lng, 2));
                     return (distDeg * 111000) <= 90;
                 });
 
-                // 4. Detect nearby IDU construction zones within radius
-                const nearbyConst = constructionZones.find(zone => {
+                const nearbyConst = constructionZonesRef.current.find(zone => {
                     const distDeg = Math.sqrt(Math.pow(currentCoord[0] - zone.lat, 2) + Math.pow(currentCoord[1] - zone.lng, 2));
                     return (distDeg * 111000) <= zone.radius;
                 });
 
-                // 5. Detect nearby citizen reports within 80 meters (lighting, potholes, etc.)
-                const nearbyReport = citizenReports.find(report => {
+                const nearbyReport = citizenReportsRef.current.find(report => {
                     const rCoords = report.properties?.coordenadas;
                     if (!rCoords) return false;
                     const distDeg = Math.sqrt(Math.pow(currentCoord[0] - rCoords[0], 2) + Math.pow(currentCoord[1] - rCoords[1], 2));
@@ -545,7 +583,7 @@ export default function App() {
                 } else if (nearbyCai) {
                     setHudRecommendation(`👮 CAI de Policía: ${nearbyCai.name}`);
                     audioGuidance.speakEvent(`cai_${nearbyCai.id}`, `CAI de policía ${nearbyCai.name} cercano.`, 60);
-                } else if (simulationState.weather === 'lluvia') {
+                } else if (simulationStateRef.current?.weather === 'lluvia') {
                     setHudRecommendation('🌧️ Calzada mojada por lluvias. Conduce con cuidado.');
                     audioGuidance.speakEvent('rain_warning', 'Calzada resbaladiza por lluvia.', 90);
                 } else if (nearbyLight && nearbyLight.state === 'verde') {
@@ -554,11 +592,10 @@ export default function App() {
                     setHudRecommendation('🚴 Ruta despejada. Disfruta tu recorrido.');
                 }
             }
-
-        }, 120 / navSpeedMultiplier);
+        }, 150 / navSpeedMultiplier);
 
         return () => clearInterval(interval);
-    }, [navStatus, cyclistIndex, activeRouteId, navSpeedMultiplier, trafficLights, segments, simulationState, constructionZones, citizenReports, navigationMode, voiceEnabled]);
+    }, [navStatus, navigationMode, navSpeedMultiplier, denseCoords]);
 
     // D2. Real-time GPS Navigation watcher
     useEffect(() => {
@@ -630,14 +667,18 @@ export default function App() {
         return () => navigator.geolocation.clearWatch(watchId);
     }, [navStatus, navigationMode, activeRouteId, generatedRoutes, segments, simulationState, constructionZones, citizenReports]);
 
-    // 5. Update default origin when localidad changes
+    // 5. Update default origin when localidad changes (only if no GPS user location)
     useEffect(() => {
-        if (localidad === 'usme') {
-            setOriginInput('Portal Usme');
-        } else {
-            setOriginInput('Molinos');
+        if (!userLocation) {
+            if (localidad === 'usme') {
+                setOriginInput('Portal Usme');
+                setRoutePoints(prev => ({ ...prev, origin: { lat: 4.5317, lng: -74.1166 } }));
+            } else {
+                setOriginInput('Molinos');
+                setRoutePoints(prev => ({ ...prev, origin: { lat: 4.5631, lng: -74.1128 } }));
+            }
         }
-    }, [localidad]);
+    }, [localidad, userLocation]);
 
     // 6. Handle localidad switch
     const handleLocalidadChange = (loc) => {
@@ -985,10 +1026,12 @@ export default function App() {
         return [];
     };
 
-    // 13. Trigger route plotting calculations
-    const handleCalculateRoute = async () => {
-        if (!originInput.trim() || !destInput.trim()) {
-            showToast("Por favor, ingresa origen y destino (escribiendo o tocando el mapa).", "warning");
+    // 13. Trigger route plotting calculations (supports optional overrides for instant 1-touch chips)
+    const handleCalculateRoute = async (overrideOrigin = null, overrideDest = null, overrideDestName = null) => {
+        const destText = overrideDestName || destInput;
+        const origText = originInput;
+        if (!destText.trim() && !overrideDest) {
+            showToast("Por favor, ingresa o selecciona tu lugar de destino.", "warning");
             return;
         }
 
@@ -996,40 +1039,51 @@ export default function App() {
         setSelectedSegmentId(null); // Deselect segment when plotting a route
         const coordRegex = /^(-?\d+\.\d+),\s*(-?\d+\.\d+)$/;
 
-        let originCoord = routePoints.origin;
+        let originCoord = overrideOrigin || routePoints.origin;
         if (!originCoord) {
-            const originMatch = originInput.match(coordRegex);
-            if (originMatch) {
-                originCoord = { lat: parseFloat(originMatch[1]), lng: parseFloat(originMatch[2]) };
+            if (userLocation && (origText.includes('ubicación') || origText === '📍 Tu ubicación actual')) {
+                originCoord = userLocation;
             } else {
-                const result = await geocodeAddress(originInput);
-                if (result) {
-                    originCoord = { lat: result.lat, lng: result.lng };
-                    setOriginInput(result.name);
+                const originMatch = origText.match(coordRegex);
+                if (originMatch) {
+                    originCoord = { lat: parseFloat(originMatch[1]), lng: parseFloat(originMatch[2]) };
+                } else if (origText.includes('ubicación') || origText === '📍 Tu ubicación actual') {
+                    const activeLoc = localitiesMap[localidad];
+                    originCoord = activeLoc ? { lat: activeLoc.center[0], lng: activeLoc.center[1] } : { lat: 4.5317, lng: -74.1166 };
                 } else {
-                    showToast(`No se pudo encontrar la ubicación de origen: "${originInput}"`, "error");
+                    const result = await geocodeAddress(origText);
+                    if (result) {
+                        originCoord = { lat: result.lat, lng: result.lng };
+                        setOriginInput(result.name);
+                    } else {
+                        showToast(`No se pudo encontrar la ubicación de origen: "${origText}"`, "error");
+                        setIsLoading(false);
+                        return;
+                    }
+                }
+            }
+        }
+
+        let destCoord = overrideDest || routePoints.destination;
+        if (!destCoord) {
+            const destMatch = destText.match(coordRegex);
+            if (destMatch) {
+                destCoord = { lat: parseFloat(destMatch[1]), lng: parseFloat(destMatch[2]) };
+            } else {
+                const result = await geocodeAddress(destText);
+                if (result) {
+                    destCoord = { lat: result.lat, lng: result.lng };
+                    setDestInput(result.name);
+                } else {
+                    showToast(`No se pudo encontrar la ubicación de destino: "${destText}"`, "error");
                     setIsLoading(false);
                     return;
                 }
             }
         }
 
-        let destCoord = routePoints.destination;
-        if (!destCoord) {
-            const destMatch = destInput.match(coordRegex);
-            if (destMatch) {
-                destCoord = { lat: parseFloat(destMatch[1]), lng: parseFloat(destMatch[2]) };
-            } else {
-                const result = await geocodeAddress(destInput);
-                if (result) {
-                    destCoord = { lat: result.lat, lng: result.lng };
-                    setDestInput(result.name);
-                } else {
-                    showToast(`No se pudo encontrar la ubicación de destino: "${destInput}"`, "error");
-                    setIsLoading(false);
-                    return;
-                }
-            }
+        if (overrideDestName) {
+            setDestInput(overrideDestName);
         }
 
         setRoutePoints({ origin: originCoord, destination: destCoord });
@@ -1145,6 +1199,8 @@ export default function App() {
             setActiveRouteId('escape_route_cai');
             setIsNavigating(true);
             setNavStatus('running');
+            setIsCameraLocked(true);
+            cyclistIndexRef.current = 0;
             setCyclistIndex(0);
             setCyclistCoords(leafletCoords[0]);
             setIsBottomSheetExpanded(true);
@@ -1182,9 +1238,10 @@ export default function App() {
     const handleClearRoute = () => {
         setGeneratedRoutes([]);
         setActiveRouteId(null);
-        setRoutePoints({ origin: null, destination: null });
+        const resetOrigin = userLocation || (localidad === 'usme' ? { lat: 4.5317, lng: -74.1166 } : { lat: 4.5631, lng: -74.1128 });
+        setRoutePoints({ origin: resetOrigin, destination: null });
         setDestInput('');
-        setOriginInput(localidad === 'usme' ? 'Portal Usme' : 'Molinos');
+        setOriginInput(userLocation ? '📍 Tu ubicación actual' : (localidad === 'usme' ? 'Portal Usme' : 'Molinos'));
         setSelectedSegmentId(null);
         setIsBottomSheetExpanded(false);
     };
@@ -1196,6 +1253,8 @@ export default function App() {
         setNavigationMode(mode);
         setIsNavigating(true);
         setNavStatus('running');
+        setIsCameraLocked(true);
+        cyclistIndexRef.current = 0;
         setCyclistIndex(0);
         setCyclistCoords(activeRoute.coordinates[0]);
         audioGuidance.speak("Iniciando recorrido hacia tu destino. Te acompañaré durante el viaje con alertas de seguridad en tiempo real.", true);
@@ -1204,8 +1263,6 @@ export default function App() {
     // 15. Calculate active predictions and CPTED recommendations
     let currentPrediction = { score: '2.4', level: 'Bajo', shaps: {} };
     let recommendations = [];
-
-    const activeRoute = generatedRoutes.find(r => r.id === activeRouteId);
 
     if (activeRoute) {
         // Evaluate active route risk
@@ -1297,6 +1354,8 @@ export default function App() {
             trafficLights={trafficLights}
             isNavigating={isNavigating}
             navigationMode={navigationMode}
+            isCameraLocked={isCameraLocked}
+            onCameraLockChange={setIsCameraLocked}
             cyclistCoords={cyclistCoords}
             cyclistIndex={cyclistIndex}
             cyclistBearing={cyclistBearing}
@@ -1490,6 +1549,20 @@ export default function App() {
                 )}
             </div>
 
+            {/* 2b. Floating Recenter Camera Button (Shown when user pans/explores map during navigation) */}
+            {!isCameraLocked && (
+                <div className="pointer-events-auto flex justify-center mb-3 animate-fade-in">
+                    <button
+                        onClick={() => setIsCameraLocked(true)}
+                        className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-2xl border-2 border-white cursor-pointer active:scale-95 transition-all"
+                        style={{ boxShadow: '0 8px 25px rgba(16, 185, 129, 0.45)' }}
+                    >
+                        <i className="fa-solid fa-location-crosshairs text-sm animate-pulse"></i>
+                        <span>📍 Recentrar al Ciclista</span>
+                    </button>
+                </div>
+            )}
+
             {/* 3. Bottom Card (Arrival Time, Remaining Km, Audio & Exit - Pure White & Emerald Green) */}
             <div 
                 className="pointer-events-auto max-w-md w-full mx-auto rounded-3xl shadow-2xl p-4 border flex items-center justify-between animate-slide-up"
@@ -1554,6 +1627,8 @@ export default function App() {
                         onClick={() => {
                             setNavStatus('stopped');
                             setIsNavigating(false);
+                            setIsCameraLocked(true);
+                            cyclistIndexRef.current = 0;
                             setCyclistCoords(null);
                             setCyclistIndex(0);
                             setSpeedKmh(0);
@@ -1639,27 +1714,28 @@ export default function App() {
                 </div>
             )}
 
-            {/* Mobile Search Overlay a Pantalla Completa */}
+            {/* Mobile Search Overlay a Pantalla Completa - Paleta Blanco y Verde */}
             {isMobile && isMobileSearchOpen && (
-                <div className="fixed inset-0 bg-slate-900/98 backdrop-blur-xl z-50 p-5 flex flex-col text-slate-100 animate-fade-in">
+                <div className="fixed inset-0 bg-white/98 backdrop-blur-xl z-50 p-5 flex flex-col text-slate-800 animate-fade-in overflow-y-auto">
                     <div className="flex items-center gap-3.5 mb-5">
                         <button 
                             onClick={() => setIsMobileSearchOpen(false)}
-                            className="w-9 h-9 rounded-full bg-slate-800 border border-slate-700/50 flex items-center justify-center text-slate-300 cursor-pointer border-none"
+                            className="w-9 h-9 rounded-full bg-emerald-50 border border-emerald-200/80 flex items-center justify-center text-emerald-800 hover:bg-emerald-100 cursor-pointer border-none shadow-xs"
+                            title="Cerrar búsqueda"
                         >
                             <i className="fa-solid fa-xmark text-sm"></i>
                         </button>
-                        <h2 className="text-base font-extrabold text-white flex items-center gap-2">
-                            <i className="fa-solid fa-route text-emerald-500"></i> Planificar Ciclorruta
+                        <h2 className="text-base font-extrabold text-emerald-900 flex items-center gap-2">
+                            <i className="fa-solid fa-route text-emerald-600"></i> Planificar Ciclorruta
                         </h2>
                     </div>
 
-                    <div className="flex flex-col gap-3 bg-slate-800/40 p-4 rounded-2xl border border-slate-700/30 mb-5">
+                    <div className="flex flex-col gap-3 bg-emerald-50/40 p-4 rounded-2xl border border-emerald-100 shadow-xs mb-5">
                         <FormField
                             value={originInput}
                             onChange={setOriginInput}
                             placeholder="Escribe origen o toca el mapa..."
-                            iconClass="fa-solid fa-circle-play text-emerald-500"
+                            iconClass="fa-solid fa-circle-play text-emerald-600"
                             onSelectOnMap={() => {
                                 setSelectingLocationMode('origin');
                                 setIsMobileSearchOpen(false);
@@ -1685,14 +1761,14 @@ export default function App() {
                         />
 
                         {/* Mobile Departure Hour & Weather */}
-                        <div className="flex items-center justify-between pt-2 border-t border-slate-700/40 text-xs">
-                            <span className="text-slate-400 font-semibold flex items-center gap-1.5">
-                                <i className="fa-regular fa-clock text-emerald-400"></i> Hora de Salida:
+                        <div className="flex items-center justify-between pt-2 border-t border-emerald-100 text-xs">
+                            <span className="text-emerald-800 font-semibold flex items-center gap-1.5">
+                                <i className="fa-regular fa-clock text-emerald-600"></i> Hora de Salida:
                             </span>
                             <select
                                 value={departureHour === null ? '' : String(departureHour)}
                                 onChange={(e) => handleDepartureHourChange(e.target.value === '' ? null : parseInt(e.target.value, 10))}
-                                className="bg-slate-700 text-slate-100 text-xs rounded-lg px-2.5 py-1 border border-slate-600 cursor-pointer"
+                                className="bg-white text-emerald-950 text-xs rounded-lg px-2.5 py-1 border border-emerald-200 cursor-pointer font-semibold shadow-xs"
                             >
                                 <option value="">Ahora (En vivo)</option>
                                 <option value="6">06:00 AM (Mañana)</option>
@@ -1702,9 +1778,9 @@ export default function App() {
                             </select>
                         </div>
                         {weatherData && (
-                            <div className="flex items-center justify-between text-[11px] text-slate-300 bg-slate-800/80 px-2.5 py-1.5 rounded-lg border border-slate-700/30">
+                            <div className="flex items-center justify-between text-[11px] text-emerald-900 bg-white px-2.5 py-1.5 rounded-lg border border-emerald-100 shadow-xs">
                                 <span>{weatherData.icon} {weatherData.temperature}°C {weatherData.description}</span>
-                                {weatherData.isRainy && <span className="text-rose-400 font-bold">🌧️ Lluvia (+1.4 Riesgo)</span>}
+                                {weatherData.isRainy && <span className="text-rose-600 font-bold">🌧️ Lluvia (+1.4 Riesgo)</span>}
                             </div>
                         )}
                     </div>
@@ -1713,6 +1789,8 @@ export default function App() {
                         <QuickDestinationChips
                             onSelectDestination={(item) => {
                                 handleSelectDestLocation(item.coords, item.name);
+                                handleCalculateRoute(null, item.coords, item.name);
+                                setIsMobileSearchOpen(false);
                             }}
                             activeDestName={destInput}
                         />
@@ -1812,9 +1890,8 @@ export default function App() {
                                     <span className="text-[10px] font-bold text-slate-400 uppercase">Estilo de Mapa:</span>
                                     <div className="flex gap-1 bg-slate-100 p-0.5 rounded-lg">
                                         {[
-                                            { key: 'light', label: 'Claro', icon: 'fa-sun' },
-                                            { key: 'dark', label: 'Oscuro', icon: 'fa-moon' },
-                                            { key: 'terrain', label: 'Relieve', icon: 'fa-mountain' }
+                                            { key: 'light', label: 'Calles (Claro)', icon: 'fa-sun' },
+                                            { key: 'terrain', label: 'Relieve (Topográfico)', icon: 'fa-mountain' }
                                         ].map(opt => (
                                             <button
                                                 key={opt.key}
@@ -1875,45 +1952,84 @@ export default function App() {
                 </div>
             )}
 
-            {/* 4. Mobile Bottom Sheet - hidden during active navigation */}
+            {/* 4. Mobile Bottom Sheet / Route Card - hidden during active navigation */}
             {isMobile && !isNavigating && !isMobileSearchOpen && (generatedRoutes.length > 0 || selectedSegmentId || isReporting || mobileActiveTab === 'citizen') && (
                 <div 
-                    className={`fixed bottom-0 left-4 right-4 z-40 md:hidden backdrop-blur-md rounded-t-3xl shadow-2xl transition-all duration-300 ease-in-out flex flex-col max-w-[calc(100vw-2rem)] mx-auto ${
-                        isBottomSheetExpanded ? 'h-[55vh]' : 'h-16'
+                    className={`fixed bottom-0 left-3 right-3 z-40 md:hidden backdrop-blur-xl rounded-t-3xl shadow-2xl transition-all duration-300 ease-in-out flex flex-col max-w-lg mx-auto bg-white/98 border border-slate-200/90 text-slate-800 ${
+                        isBottomSheetExpanded ? 'h-[65vh]' : (generatedRoutes.length > 0 ? 'h-40' : 'h-16')
                     }`}
                     style={{
-                        background: 'var(--bg-surface)',
-                        border: '1px solid var(--border-surface)',
-                        color: 'var(--text-on-surface)'
+                        boxShadow: '0 -10px 30px rgba(0, 0, 0, 0.12)'
                     }}
                 >
-                    {/* Handle Bar (Drag Trigger) */}
+                    {/* Handle Bar & Quick Route Info */}
                     <div 
                         onClick={() => setIsBottomSheetExpanded(!isBottomSheetExpanded)}
-                        className="flex flex-col items-center justify-center py-2 h-16 cursor-pointer select-none active:bg-slate-100 rounded-t-3xl border-b border-slate-100"
+                        className="flex flex-col items-center justify-center pt-2 pb-1.5 px-4 cursor-pointer select-none active:bg-slate-50 rounded-t-3xl border-b border-slate-100/80"
                     >
-                        <div className="w-12 h-1.5 bg-slate-300 rounded-full mb-1"></div>
-                        <div className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                            <span>
+                        <div className="w-10 h-1 bg-slate-300 rounded-full mb-2"></div>
+                        <div className="w-full flex items-center justify-between text-xs font-bold text-slate-700">
+                            <span className="flex items-center gap-1.5 truncate">
                                 {generatedRoutes.length > 0 
-                                    ? `${generatedRoutes.length} Ruta(s) calculada(s)`
+                                    ? <span className="font-extrabold text-slate-900 truncate">{activeRoute?.name || 'Ruta Seleccionada'}</span>
                                     : selectedSegmentId === 'custom_audit'
                                         ? 'Calle Auditada Seleccionada'
                                         : isReporting
                                             ? 'Nuevo Reporte Ciudadano'
                                             : 'Tramo Seleccionado'}
                             </span>
-                            <i className={`fa-solid ${isBottomSheetExpanded ? 'fa-chevron-down' : 'fa-chevron-up'} text-[10px] text-slate-500`}></i>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                                {generatedRoutes.length > 0 && (
+                                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                                        {activeRoute?.profileTag || '🛡️ Blindada'}
+                                    </span>
+                                )}
+                                <i className={`fa-solid ${isBottomSheetExpanded ? 'fa-chevron-down' : 'fa-chevron-up'} text-xs text-slate-400`}></i>
+                            </div>
                         </div>
-                        {/* Quick summary line when collapsed */}
+
+                        {/* If collapsed and routes exist: Minimalist Quick Action Bar */}
                         {!isBottomSheetExpanded && activeRoute && (
-                            <span className="text-[10px] text-emerald-700 font-semibold mt-0.5">
-                                {activeRoute.name} - {activeRoute.distanceKm} km - {activeRoute.durationMin} min - Riesgo: {activeRoute.maxRiskLevel}
-                            </span>
+                            <div className="w-full mt-2 flex items-center justify-between gap-3">
+                                <div className="flex flex-col">
+                                    <div className="flex items-baseline gap-1.5">
+                                        <span className="text-xl font-black tracking-tight text-slate-900">{activeRoute.durationMin} min</span>
+                                        <span className="text-xs font-semibold text-slate-500">({activeRoute.distanceKm} km)</span>
+                                    </div>
+                                    <span className="text-[11px] font-semibold text-emerald-700">
+                                        Riesgo {activeRoute.maxRiskLevel} • {activeRoute.avgRiskScore}/10
+                                    </span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleStartNavigation('simulated');
+                                        }}
+                                        className="py-2.5 px-3 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 rounded-2xl font-bold text-xs flex items-center gap-1.5 cursor-pointer border-none transition-all active:scale-95"
+                                        title="Simulación virtual paso a paso"
+                                    >
+                                        <i className="fa-solid fa-play text-xs text-emerald-700"></i>
+                                        <span>Simular</span>
+                                    </button>
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleStartNavigation('gps');
+                                        }}
+                                        className="py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black text-xs shadow-md flex items-center gap-2 cursor-pointer border-none transition-all active:scale-95"
+                                        style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}
+                                        title="Iniciar navegación con GPS y guía de voz"
+                                    >
+                                        <i className="fa-solid fa-diamond-turn-right text-xs"></i>
+                                        <span>Iniciar</span>
+                                    </button>
+                                </div>
+                            </div>
                         )}
                         {!isBottomSheetExpanded && selectedSegmentId && segments[selectedSegmentId] && (
-                            <span className="text-[10px] text-emerald-700 font-semibold mt-0.5">
-                                {segments[selectedSegmentId].name.slice(0, 35)}... - Riesgo: {currentPrediction.level}
+                            <span className="text-[11px] text-emerald-700 font-semibold mt-1 truncate w-full text-left">
+                                {segments[selectedSegmentId].name.slice(0, 45)}... - Riesgo: {currentPrediction.level}
                             </span>
                         )}
                     </div>
@@ -1983,40 +2099,16 @@ export default function App() {
             )}
 
             {/* Ergonomía Móvil: Barra Inferior en la Zona del Pulgar (Heurística 4 y 7) */}
-            {isMobile && !isNavigating && !isMobileSearchOpen && (
+            {isMobile && !isNavigating && !isMobileSearchOpen && generatedRoutes.length === 0 && !selectedSegmentId && (
                 <MobileBottomDock
                     onOpenSearch={() => setIsMobileSearchOpen(true)}
                     onToggleResults={() => {
-                        if (generatedRoutes.length > 0 || selectedSegmentId) {
-                            setIsBottomSheetExpanded(!isBottomSheetExpanded);
-                        } else {
-                            setIsMobileSearchOpen(true);
-                        }
+                        setIsMobileSearchOpen(true);
                     }}
-                    hasRoutes={generatedRoutes.length > 0}
-                    activeRouteCount={generatedRoutes.length}
+                    hasRoutes={false}
+                    activeRouteCount={0}
                     onEmergencySOS={() => setIsSafeHavenOpen(true)}
-                    onToggleCaravanas={() => {
-                        setMapLayers(prev => {
-                            const next = !prev.caravans;
-                            showToast(next ? 'Bici-Caravanas visibles en el mapa' : 'Capa de Caravanas desactivada', 'info');
-                            return { ...prev, caravans: next };
-                        });
-                    }}
-                    onOpenReport={() => {
-                        setIsReporting(true);
-                        setIsSelectingCoords(true);
-                        setSelectingLocationMode('report');
-                        showToast('Toca el mapa en el punto exacto para ubicar la novedad.', 'info');
-                    }}
-                    onToggleZen={() => {
-                        setIsZenMode(prev => {
-                            const next = !prev;
-                            showToast(next ? '🧘 Modo Zen: Mapa despejado' : 'Modo estándar restaurado', 'info');
-                            return next;
-                        });
-                    }}
-                    isZenMode={isZenMode}
+                    onOpenLayers={() => setMobileLayersOpen(prev => !prev)}
                 />
             )}
 
@@ -2065,7 +2157,7 @@ export default function App() {
                         {/* Botón de Emergencia Refugio Seguro / CAI (CU-03) */}
                         <button
                             onClick={() => setIsSafeHavenOpen(true)}
-                            className="tab-vertical-btn text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50"
+                            className="tab-vertical-btn text-rose-500 hover:text-rose-600 hover:bg-rose-50"
                             title="🚨 Refugio Seguro / CAI Más Cercano"
                         >
                             <i className="fa-solid fa-shield-halved text-rose-500 animate-pulse"></i>
@@ -2074,31 +2166,31 @@ export default function App() {
                         {/* Herramientas de Investigación / Modo Científico (CU-06, CU-07, CU-08, CU-09) */}
                         {viewMode === 'tech' && (
                             <>
-                                <div className="w-6 h-[1px] bg-slate-200 dark:bg-slate-700 my-1 mx-auto"></div>
+                                <div className="w-6 h-[1px] bg-slate-200 my-1 mx-auto"></div>
                                 <button
                                     onClick={() => setIsInterventionModalOpen(true)}
-                                    className="tab-vertical-btn text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/50"
+                                    className="tab-vertical-btn text-emerald-600 hover:bg-emerald-50"
                                     title="🔬 Simulador Distrital What-If (CU-06)"
                                 >
                                     <i className="fa-solid fa-flask-vial"></i>
                                 </button>
                                 <button
                                     onClick={() => setIsModelValidationOpen(true)}
-                                    className="tab-vertical-btn text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-950/50"
+                                    className="tab-vertical-btn text-indigo-500 hover:bg-indigo-50"
                                     title="📊 Calibración & Backtesting Empírico (CU-07)"
                                 >
                                     <i className="fa-solid fa-chart-line"></i>
                                 </button>
                                 <button
                                     onClick={() => setIsPriorityHeatmapOpen(true)}
-                                    className="tab-vertical-btn text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/50"
+                                    className="tab-vertical-btn text-amber-500 hover:bg-amber-50"
                                     title="🏛️ Priorización Inversión UAESP / IDU (CU-08)"
                                 >
                                     <i className="fa-solid fa-landmark"></i>
                                 </button>
                                 <button
                                     onClick={() => setIsCptedAuditOpen(true)}
-                                    className="tab-vertical-btn text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-950/50"
+                                    className="tab-vertical-btn text-teal-600 hover:bg-teal-50"
                                     title="📋 Auditoría CPTED de Campo (CU-09)"
                                 >
                                     <i className="fa-solid fa-clipboard-check"></i>
@@ -2115,7 +2207,7 @@ export default function App() {
                                 setIsZenMode(true);
                                 showToast('🧘 Modo Zen activado (Presiona Z o Esc para salir)', 'info');
                             }}
-                            className="tab-vertical-btn text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/50"
+                            className="tab-vertical-btn text-emerald-600 hover:bg-emerald-50"
                             title="Modo Zen: Mapa despejado (Tecla Z)"
                         >
                             <i className="fa-solid fa-expand"></i>
@@ -2124,7 +2216,7 @@ export default function App() {
                         {/* Botón Atajos de Teclado (?) (Heurística 7) */}
                         <button 
                             onClick={() => setIsShortcutsOpen(true)}
-                            className="tab-vertical-btn text-slate-500 hover:text-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800"
+                            className="tab-vertical-btn text-slate-500 hover:text-emerald-700 hover:bg-emerald-50"
                             title="Atajos de teclado (?)"
                         >
                             <i className="fa-solid fa-keyboard"></i>
@@ -2133,7 +2225,7 @@ export default function App() {
                         {/* Botón Micro-Tour Onboarding (Heurística 10) */}
                         <button 
                             onClick={() => setIsOnboardingOpen(true)}
-                            className="tab-vertical-btn text-slate-500 hover:text-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800"
+                            className="tab-vertical-btn text-slate-500 hover:text-emerald-700 hover:bg-emerald-50"
                             title="Guía de bienvenida y ayuda"
                         >
                             <i className="fa-solid fa-circle-question"></i>
@@ -2141,25 +2233,15 @@ export default function App() {
                         
                         <button 
                             onClick={() => {
-                                if (mapStyle === 'light') setMapStyle('dark');
-                                else if (mapStyle === 'dark') setMapStyle('terrain');
-                                else setMapStyle('light');
+                                setMapStyle(mapStyle === 'light' ? 'terrain' : 'light');
                             }}
-                            className="tab-vertical-btn"
+                            className="tab-vertical-btn text-emerald-700 hover:bg-emerald-50"
                             title={
-                                mapStyle === 'light' ? "Modo Oscuro" : 
-                                mapStyle === 'dark' ? "Modo Elevaciones (3D/Relieve)" : 
-                                "Modo Claro"
+                                mapStyle === 'light' ? "Ver Relieve y Altimetría (Topográfico)" : "Ver Mapa de Calles (Claro)"
                             }
-                            style={{ 
-                                color: mapStyle === 'light' ? 'var(--text-secondary)' : 
-                                       mapStyle === 'dark' ? '#eab308' : '#38bdf8' 
-                            }}
                         >
                             <i className={`fa-solid ${
-                                mapStyle === 'light' ? 'fa-moon' : 
-                                mapStyle === 'dark' ? 'fa-mountain' : 
-                                'fa-sun'
+                                mapStyle === 'light' ? 'fa-mountain' : 'fa-map'
                             }`}></i>
                         </button>
                     </div>
@@ -2220,13 +2302,13 @@ export default function App() {
                     {/* Weather Live Widget (CU-01) */}
                     {weatherData && (
                         <div 
-                            className="px-3 py-2 rounded-2xl bg-white/95 dark:bg-slate-850/95 border border-slate-200/90 dark:border-slate-700 shadow-md flex items-center gap-2.5 text-xs font-bold text-slate-800 dark:text-slate-100 backdrop-blur-md animate-fade-in"
+                            className="px-3 py-2 rounded-2xl bg-white/95 border border-emerald-100 shadow-md flex items-center gap-2.5 text-xs font-bold text-slate-800 backdrop-blur-md animate-fade-in"
                             title={`Clima en vivo Bogotá • Actualizado: ${weatherData.updatedAt}`}
                         >
                             <i className={`fa-solid ${weatherData.condition === 'lluvia' ? 'fa-cloud-showers-heavy text-blue-500' : 'fa-cloud-sun text-amber-500'} text-base`}></i>
                             <div className="flex flex-col text-left">
-                                <span className="leading-tight text-xs font-black text-slate-900 dark:text-white">{weatherData.temperature}°C</span>
-                                <span className="text-[9px] text-slate-500 dark:text-slate-400 font-semibold leading-tight">{weatherData.description}</span>
+                                <span className="leading-tight text-xs font-black text-emerald-950">{weatherData.temperature}°C</span>
+                                <span className="text-[9px] text-slate-500 font-semibold leading-tight">{weatherData.description}</span>
                             </div>
                         </div>
                     )}
@@ -2274,12 +2356,12 @@ export default function App() {
                                         <input type="checkbox" checked={mapLayers.trafficJams} onChange={e => setMapLayers(p=>({...p, trafficJams: e.target.checked}))} className="accent-emerald-600 w-3.5 h-3.5"/>
                                     </label>
                                     <label className="flex justify-between items-center py-0.5">
-                                        <span className="text-slate-700">Semáforos</span>
-                                        <input type="checkbox" checked={mapLayers.trafficLights} onChange={e => setMapLayers(p=>({...p, trafficLights: e.target.checked}))} className="accent-emerald-600 w-3.5 h-3.5"/>
+                                        <span className="text-slate-700">Reportes de la Comunidad</span>
+                                        <input type="checkbox" checked={mapLayers.citizenReports} onChange={e => setMapLayers(p=>({...p, citizenReports: e.target.checked}))} className="accent-emerald-600 w-3.5 h-3.5"/>
                                     </label>
                                     <label className="flex justify-between items-center py-0.5">
-                                        <span className="text-slate-700">Reportes Ciudadanos</span>
-                                        <input type="checkbox" checked={mapLayers.citizenReports} onChange={e => setMapLayers(p=>({...p, citizenReports: e.target.checked}))} className="accent-emerald-600 w-3.5 h-3.5"/>
+                                        <span className="text-slate-700">Semáforos Inteligentes</span>
+                                        <input type="checkbox" checked={mapLayers.trafficLights} onChange={e => setMapLayers(p=>({...p, trafficLights: e.target.checked}))} className="accent-emerald-600 w-3.5 h-3.5"/>
                                     </label>
                                 </div>
                             </div>
@@ -2297,13 +2379,13 @@ export default function App() {
 
             {/* 9. Minimalist Floating Zen HUD Card (Heurística 8: Diseño estético y minimalista) */}
             {isZenMode && (
-                <div className="fixed top-5 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 px-5 py-2.5 rounded-full bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl border border-slate-200/90 dark:border-slate-700 shadow-2xl animate-slide-down text-xs font-bold text-slate-800 dark:text-slate-100 select-none">
+                <div className="fixed top-5 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 px-5 py-2.5 rounded-full bg-white/95 backdrop-blur-2xl border border-emerald-200 shadow-xl animate-slide-down text-xs font-bold text-slate-800 select-none">
                     <span className="flex items-center gap-1.5 text-emerald-600 font-black">
                         <i className="fa-solid fa-eye text-xs"></i> Modo Zen
                     </span>
                     {activeRoute ? (
                         <>
-                            <span className="text-slate-300 dark:text-slate-700">|</span>
+                            <span className="text-slate-300">|</span>
                             <span className="truncate max-w-[150px]">{activeRoute.name}</span>
                             <span className="text-slate-500 font-semibold">{activeRoute.distanceKm} km • {activeRoute.durationMin} min</span>
                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
@@ -2315,17 +2397,17 @@ export default function App() {
                         </>
                     ) : (
                         <>
-                            <span className="text-slate-300 dark:text-slate-700">|</span>
+                            <span className="text-slate-300">|</span>
                             <span className="text-slate-500">Exploración libre del mapa</span>
                         </>
                     )}
                     <button
                         onClick={() => setIsZenMode(false)}
-                        className="ml-2 px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 text-2xs font-extrabold flex items-center gap-1 border-none cursor-pointer transition-colors"
+                        className="ml-2 px-2.5 py-1 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-2xs font-extrabold flex items-center gap-1 border border-emerald-200 cursor-pointer transition-colors"
                         title="Restaurar paneles (Tecla Z o Esc)"
                     >
                         <span>Salir</span>
-                        <kbd className="font-mono text-[9px] bg-slate-300 dark:bg-slate-700 px-1 rounded">Esc</kbd>
+                        <kbd className="font-mono text-[9px] bg-white border border-emerald-200 text-emerald-800 px-1 rounded">Esc</kbd>
                     </button>
                 </div>
             )}

@@ -16,8 +16,9 @@ SafeCycle Bogotá es una aplicación web interactiva de investigación que model
 6. [Stack Tecnológico](#stack-tecnológico)
 7. [Estructura del Proyecto](#estructura-del-proyecto)
 8. [Guía de Inicio Rápido](#guía-de-inicio-rápido)
-9. [Vistas y Modos de Usuario](#vistas-y-modos-de-usuario)
-10. [Capas del Mapa](#capas-del-mapa)
+9. [Compilación Móvil para Android (Capacitor & Android Studio)](#compilación-móvil-para-android-capacitor--android-studio)
+10. [Vistas y Modos de Usuario](#vistas-y-modos-de-usuario)
+11. [Capas del Mapa](#capas-del-mapa)
 
 ---
 
@@ -274,6 +275,54 @@ La aplicación estará disponible en `http://localhost:5173/`
 npm run build
 npm run preview
 ```
+
+---
+
+## Compilación Móvil para Android (Capacitor & Android Studio)
+
+El proyecto utiliza **Capacitor** (`@capacitor/android`) para encapsular la aplicación web en un APK nativo de Android.
+
+> [!IMPORTANT]
+> ### ⚠️ REGLAS OBLIGATORIAS PARA AGENTES DE IA Y DESARROLLADORES:
+> 
+> 1. **Sincronización con Android Studio (`npm run cap:sync`):**  
+>    **Android Studio NO detecta ni compila automáticamente los cambios realizados en React (`src/`).**  
+>    Android Studio únicamente empaqueta los archivos estáticos almacenados en:  
+>    `android/app/src/main/assets/public/`  
+>    Cada vez que se realice cualquier modificación en el código web (`src/`, `public/`, `index.html`, etc.), **ES ESTRICTAMENTE OBLIGATORIO** sincronizar antes de compilar o generar el APK:
+>    ```bash
+>    npm run cap:sync
+>    ```
+>    *(Este comando ejecuta en secuencia `npm run build` para compilar los bundles en `dist/` y luego `npx cap sync` para transferirlos a `android/app/src/main/assets/public/`).*  
+>    Si no se ejecuta `npm run cap:sync`, **Android Studio compilará la versión antigua**.
+> 
+> 2. **Sincronización Obligatoria con GitHub tras cada Chat / Tarea:**  
+>    Al culminar cada requerimiento, conversación o entrega de código, el agente de IA **DEBE sincronizar y subir todos los cambios al repositorio remoto en GitHub**:
+>    ```bash
+>    git add .
+>    git commit -m "feat/fix: descripción clara del cambio realizado"
+>    git push origin main
+>    ```
+>    Esto garantiza que el repositorio remoto en GitHub siempre permanezca sincronizado con la última versión de la aplicación.
+
+### Flujo de Compilación del APK en Android Studio:
+
+1. **Sincronizar cambios web con Android**:
+   ```bash
+   npm run cap:sync
+   ```
+2. **Abrir el proyecto en Android Studio** (si no está abierto):
+   ```bash
+   npm run cap:open
+   ```
+   *(O abrir directamente la carpeta `android/` en Android Studio).*
+3. **Generar el APK**:
+   - En la barra de menús superior de Android Studio:  
+     👉 **Build** > **Build Bundle(s) / APK(s)** > **Build APK(s)**
+   - O si hay un teléfono o emulador conectado, presionar el botón verde **Run 'app' ▶️**.
+4. **Localizar el APK generado**:
+   - Al finalizar, hacer clic en el enlace **`locate`** de la notificación inferior derecha, o consultar la ruta:
+     `android/app/build/outputs/apk/debug/app-debug.apk`
 
 ---
 

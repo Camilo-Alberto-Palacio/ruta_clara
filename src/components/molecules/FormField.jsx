@@ -161,6 +161,13 @@ export default function FormField({
                     className="w-full bg-transparent border-none outline-none text-slate-800 text-xs py-0.5"
                 />
 
+                {value && value.includes('ubicación') && (
+                    <span className="flex-shrink-0 text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 uppercase tracking-wider mr-1.5 select-none flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                        GPS
+                    </span>
+                )}
+
                 {/* Dropdown de Sugerencias */}
                 {showDropdown && (suggestions.length > 0 || loading) && (
                     <ul className="suggestions-dropdown absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-50 max-h-60 overflow-y-auto">

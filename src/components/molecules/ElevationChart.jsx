@@ -34,7 +34,7 @@ export default function ElevationChart({ profile }) {
     };
 
     return (
-        <div className="elevation-profile-widget p-3 rounded-2xl bg-slate-50/80 dark:bg-slate-850/80 border border-slate-200/80 dark:border-slate-750/70 mt-2">
+        <div className="elevation-profile-widget p-3 rounded-2xl bg-slate-50/80 border border-slate-200/80 mt-2">
             <div className="flex items-center justify-between mb-2">
                 <span className="text-2xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
                     <i className="fa-solid fa-mountain text-emerald-600"></i> Altimetría & Pendiente
@@ -99,18 +99,18 @@ export default function ElevationChart({ profile }) {
             </div>
 
             {/* Métricas resumen en badges */}
-            <div className="grid grid-cols-3 gap-1.5 mt-2 pt-2 border-t border-slate-200/50 dark:border-slate-700/50 text-center">
+            <div className="grid grid-cols-3 gap-1.5 mt-2 pt-2 border-t border-slate-200/50 text-center">
                 <div className="flex flex-col">
                     <span className="text-[9px] text-slate-400 font-semibold">Desnivel +</span>
-                    <span className="text-xs font-black text-emerald-600 dark:text-emerald-400">+{gainMeters} m</span>
+                    <span className="text-xs font-black text-emerald-600">+{gainMeters} m</span>
                 </div>
                 <div className="flex flex-col">
                     <span className="text-[9px] text-slate-400 font-semibold">Desnivel -</span>
-                    <span className="text-xs font-black text-slate-600 dark:text-slate-300">-{lossMeters} m</span>
+                    <span className="text-xs font-black text-slate-600">-{lossMeters} m</span>
                 </div>
                 <div className="flex flex-col">
                     <span className="text-[9px] text-slate-400 font-semibold">Pendiente Prom.</span>
-                    <span className="text-xs font-black text-amber-600 dark:text-amber-400">{avgSlopePercent}%</span>
+                    <span className="text-xs font-black text-amber-600">{avgSlopePercent}%</span>
                 </div>
             </div>
         </div>

@@ -49,8 +49,8 @@ export default function SafeHavenEmergencyModal({
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md animate-fade-in">
-            <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-rose-500/40 w-full max-w-md overflow-hidden animate-scale-up">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-emerald-950/30 backdrop-blur-sm animate-fade-in">
+            <div className="bg-white rounded-3xl shadow-2xl border border-rose-500/30 w-full max-w-md overflow-hidden animate-scale-up">
                 {/* Cabecera de emergencia */}
                 <div className="bg-gradient-to-r from-rose-600 via-rose-700 to-red-800 p-5 text-white flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -77,21 +77,21 @@ export default function SafeHavenEmergencyModal({
                 {/* Contenido */}
                 <div className="p-5 flex flex-col gap-4">
                     {nearestCai && (
-                        <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 flex flex-col gap-3">
+                        <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 flex flex-col gap-3">
                             <div className="flex justify-between items-start">
                                 <div>
-                                    <span className="text-[10px] font-black uppercase tracking-wider text-rose-700 dark:text-rose-400">
+                                    <span className="text-[10px] font-black uppercase tracking-wider text-rose-700">
                                         Punto Seguro Más Cercano
                                     </span>
-                                    <h3 className="text-base font-black text-slate-900 dark:text-white mt-0.5">
+                                    <h3 className="text-base font-black text-slate-900 mt-0.5">
                                         {nearestCai.name}
                                     </h3>
-                                    <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
+                                    <p className="text-xs text-slate-600 mt-0.5">
                                         {nearestCai.address || 'Localidad del cuadrante'}
                                     </p>
                                 </div>
                                 <div className="text-right">
-                                    <span className="text-lg font-black text-rose-600 dark:text-rose-400">
+                                    <span className="text-lg font-black text-rose-600">
                                         {nearestCai.distanceMeters > 1000 
                                             ? `${(nearestCai.distanceMeters / 1000).toFixed(1)} km` 
                                             : `${nearestCai.distanceMeters} m`}
@@ -117,7 +117,7 @@ export default function SafeHavenEmergencyModal({
                     <div className="flex gap-2">
                         <button
                             onClick={() => handleShareSosWhatsApp(nearestCai)}
-                            className="flex-1 py-2.5 px-3 rounded-xl font-bold text-xs text-emerald-800 dark:text-emerald-200 bg-emerald-100 dark:bg-emerald-950/60 hover:bg-emerald-200/80 border border-emerald-300 dark:border-emerald-800 transition-all flex items-center justify-center gap-2 border-none cursor-pointer"
+                            className="flex-1 py-2.5 px-3 rounded-xl font-bold text-xs text-emerald-800 bg-emerald-100 hover:bg-emerald-200/80 border border-emerald-300 transition-all flex items-center justify-center gap-2 border-none cursor-pointer"
                         >
                             <i className="fa-brands fa-whatsapp text-emerald-600 text-sm"></i>
                             <span>Compartir SOS por WhatsApp</span>
@@ -125,7 +125,7 @@ export default function SafeHavenEmergencyModal({
                         
                         <a
                             href="tel:123"
-                            className="py-2.5 px-4 rounded-xl font-black text-xs text-white bg-slate-800 hover:bg-slate-900 transition-all flex items-center justify-center gap-2 text-decoration-none"
+                            className="py-2.5 px-4 rounded-xl font-black text-xs text-white bg-rose-700 hover:bg-rose-800 transition-all flex items-center justify-center gap-2 text-decoration-none shadow-xs"
                         >
                             <i className="fa-solid fa-phone"></i>
                             <span>123</span>
@@ -141,10 +141,10 @@ export default function SafeHavenEmergencyModal({
                             {sortedCais.slice(1, 4).map(cai => (
                                 <div 
                                     key={cai.id}
-                                    className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-between"
+                                    className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between"
                                 >
                                     <div>
-                                        <span className="text-xs font-bold text-slate-800 dark:text-slate-100 block">
+                                        <span className="text-xs font-bold text-slate-800 block">
                                             {cai.name}
                                         </span>
                                         <span className="text-2xs text-slate-500">

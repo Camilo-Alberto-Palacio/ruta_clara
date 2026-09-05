@@ -108,7 +108,9 @@ export default function MapComponent({
     activeRoute = null,
     leftDrawerOpen = true,
     rightDrawerOpen = true,
-    isMobile = false
+    isMobile = false,
+    isCameraLocked = true,
+    onCameraLockChange
 }) {
     // Derive the active route's coordinates for proximity filtering
     const activeRouteCoords = activeRoute ? activeRoute.coordinates : null;
@@ -139,8 +141,12 @@ export default function MapComponent({
         onLocationSelect,
         onSelectRoute,
         onLocalidadChange,
-        onUpvoteReport
+        onUpvoteReport,
+        onCameraLockChange
     };
+
+    const isNavigatingRef = useRef(isNavigating);
+    isNavigatingRef.current = isNavigating;
 
     // Keep ref of selecting location mode
     const selectingModeRef = useRef(selectingLocationMode);
@@ -181,6 +187,13 @@ export default function MapComponent({
         // Update zoom state on zoom changes
         map.on('zoomend', () => {
             setCurrentZoom(map.getZoom());
+        });
+
+        // Detect manual user drag to release camera lock during active navigation
+        map.on('dragstart', () => {
+            if (isNavigatingRef.current && callbacksRef.current.onCameraLockChange) {
+                callbacksRef.current.onCameraLockChange(false);
+            }
         });
 
         // Initial Tile Layer based on mapStyle
@@ -465,15 +478,29 @@ export default function MapComponent({
         ['origin', 'destination'].forEach(mode => {
             const pt = routePoints[mode];
             if (pt) {
-                const iconColor = mode === 'origin' ? '#10b981' : '#ef4444';
-                const label = mode === 'origin' ? 'Origen' : 'Destino';
+                const isOrigin = mode === 'origin';
+                const label = isOrigin ? 'Tu Ubicación (Origen)' : 'Destino';
                 
                 const marker = L.marker([pt.lat, pt.lng], {
                     icon: L.divIcon({
                         className: 'route-point-marker',
-                        html: `<i class="fa-solid fa-location-dot" style="font-size: 24px; color: ${iconColor}; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));"></i>`,
-                        iconSize: [24, 24],
-                        iconAnchor: [12, 24]
+                        html: isOrigin ? `
+                            <div class="user-pulse-marker" style="
+                                width: 22px; 
+                                height: 22px; 
+                                background: #10b981; 
+                                border: 3px solid #ffffff; 
+                                border-radius: 50%; 
+                                box-shadow: 0 0 12px rgba(16, 185, 129, 0.8), 0 2px 5px rgba(0,0,0,0.35);
+                                display: flex;
+                                align-items: center;
+                                justify-content: center;
+                            ">
+                                <span style="width: 6px; height: 6px; background: #ffffff; border-radius: 50%;"></span>
+                            </div>
+                        ` : `<i class="fa-solid fa-location-dot" style="font-size: 24px; color: #ef4444; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));"></i>`,
+                        iconSize: isOrigin ? [22, 22] : [24, 24],
+                        iconAnchor: isOrigin ? [11, 11] : [12, 24]
                     })
                 }).addTo(map);
 
@@ -1253,13 +1280,13 @@ export default function MapComponent({
                         <div style="
                             width: 16px;
                             height: 16px;
-                            background: #0f172a;
-                            border: 1.5px solid #475569;
+                            background: #ffffff;
+                            border: 1.5px solid #10b981;
                             border-radius: 50%;
                             display: flex;
                             align-items: center;
                             justify-content: center;
-                            box-shadow: 0 2px 5px rgba(0,0,0,0.35);
+                            box-shadow: 0 2px 5px rgba(16, 185, 129, 0.25);
                             cursor: pointer;
                         ">
                             <span style="
@@ -1297,31 +1324,27 @@ export default function MapComponent({
         });
     }, [trafficLights, mapLayers.trafficLights, activeRoute, currentZoom]);
 
-    // 3D Navigation Cyclist Tracker and Camera Follow
+    // 3D Navigation Cyclist Tracker and Camera Follow (with free user map exploration)
     useEffect(() => {
         const map = mapRef.current;
+        if (!map) return;
+
+        // Ensure user gestures (panning, pinching, zooming) are ALWAYS enabled
+        map.dragging.enable();
+        map.touchZoom.enable();
+        map.doubleClickZoom.enable();
+        map.scrollWheelZoom.enable();
+        map.boxZoom.enable();
+        map.keyboard.enable();
+
         if (!isNavigating || !cyclistCoords) {
-            // Remove cyclist marker and restore user map interactions
+            // Remove cyclist marker when not navigating
             if (cyclistMarkerRef.current) {
                 map.removeLayer(cyclistMarkerRef.current);
                 cyclistMarkerRef.current = null;
             }
-            map.dragging.enable();
-            map.touchZoom.enable();
-            map.doubleClickZoom.enable();
-            map.scrollWheelZoom.enable();
-            map.boxZoom.enable();
-            map.keyboard.enable();
             return;
         }
-
-        // Disable manual pan/zoom during active navigation to keep camera locked on vehicle
-        map.dragging.disable();
-        map.touchZoom.disable();
-        map.doubleClickZoom.disable();
-        map.scrollWheelZoom.disable();
-        map.boxZoom.disable();
-        map.keyboard.disable();
 
         // If marker already exists, smoothly update position and rotate arrow to point along tangent
         if (cyclistMarkerRef.current) {
@@ -1334,7 +1357,7 @@ export default function MapComponent({
                 }
             }
         } else {
-            // Waze-style Cyan Navigation Cursor / Puck with dynamic tangent rotation
+            // Emerald Green Navigation Cursor (Ruta Clara Palette)
             const cyclistIcon = L.divIcon({
                 className: 'waze-vehicle-puck-wrapper',
                 html: `
@@ -1355,7 +1378,7 @@ export default function MapComponent({
                             border-radius: 50%;
                             filter: blur(5px);
                         "></div>
-                        <!-- Emerald Green Navigation Cursor (Ruta Clara Palette) -->
+                        <!-- Emerald Green Navigation Cursor -->
                         <div style="
                             position: relative;
                             width: 38px;
@@ -1392,20 +1415,24 @@ export default function MapComponent({
             }).addTo(map);
 
             cyclistMarkerRef.current = cyclistMarker;
-            map.setView(cyclistCoords, 17);
+            if (isCameraLocked) {
+                map.setView(cyclistCoords, 17);
+            }
         }
 
-        // Ensure street-level zoom 17 for close situational awareness during navigation
-        if (map.getZoom() < 16) {
-            map.setView(cyclistCoords, 17);
-        } else {
-            map.panTo(cyclistCoords, { 
-                animate: true,
-                duration: 0.25,
-                easeLinearity: 0.25
-            });
+        // Camera follow ONLY if user has NOT panned away
+        if (isCameraLocked) {
+            if (map.getZoom() < 16) {
+                map.setView(cyclistCoords, 17);
+            } else {
+                map.panTo(cyclistCoords, { 
+                    animate: true,
+                    duration: 0.25,
+                    easeLinearity: 0.25
+                });
+            }
         }
-    }, [isNavigating, cyclistCoords, cyclistIndex, cyclistBearing, activeRouteId]);
+    }, [isNavigating, cyclistCoords, cyclistBearing, isCameraLocked]);
 
     // 9. Zoom to specific coordinates when requested (e.g. from citizen reports panel)
     useEffect(() => {

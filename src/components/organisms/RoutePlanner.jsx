@@ -104,7 +104,12 @@ export default function RoutePlanner({
 
             {/* Quick Destination Chips (Heurística 6) */}
             <QuickDestinationChips 
-                onSelectDestination={(item) => onSelectDestLocation(item.coords, item.name)}
+                onSelectDestination={(item) => {
+                    onSelectDestLocation(item.coords, item.name);
+                    if (onCalculateRoute) {
+                        onCalculateRoute(null, item.coords, item.name);
+                    }
+                }}
                 activeDestName={destInput}
             />
 

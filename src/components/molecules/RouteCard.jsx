@@ -28,7 +28,7 @@ export default function RouteCard({
                 <div className="flex items-center gap-1.5 overflow-hidden">
                     <span className="route-card-title">{route.name}</span>
                     {route.profileTag && (
-                        <span className="text-[10px] font-black px-1.5 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
+                        <span className="text-[10px] font-black px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-700">
                             {route.profileTag}
                         </span>
                     )}

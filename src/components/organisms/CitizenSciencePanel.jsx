@@ -79,10 +79,10 @@ export default function CitizenSciencePanel({
     return (
         <div className="citizen-science-card">
             <div className="flex items-center justify-between mb-1.5">
-                <h3 className="m-0 flex items-center gap-1.5 text-sm font-extrabold text-slate-800 dark:text-slate-100">
+                <h3 className="m-0 flex items-center gap-1.5 text-sm font-extrabold text-slate-800">
                     <i className="fa-solid fa-people-group text-emerald-600"></i> Ciencia Ciudadana
                 </h3>
-                <span className="text-3xs uppercase font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
+                <span className="text-3xs uppercase font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
                     CPTED Colaborativo
                 </span>
             </div>
@@ -93,12 +93,12 @@ export default function CitizenSciencePanel({
 
             {/* Selector de sub-pestañas */}
             {!isReporting && (
-                <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl mb-3 gap-1">
+                <div className="flex bg-slate-100 p-1 rounded-xl mb-3 gap-1">
                     <button
                         onClick={() => setFilterTab('activos')}
                         className={`flex-1 py-1.5 rounded-lg text-2xs font-extrabold border-none cursor-pointer transition-all ${
                             filterTab === 'activos' 
-                                ? 'bg-white dark:bg-slate-700 text-emerald-700 dark:text-emerald-400 shadow-xs' 
+                                ? 'bg-white text-emerald-700 shadow-xs' 
                                 : 'text-slate-500 hover:text-slate-800'
                         }`}
                     >
@@ -108,7 +108,7 @@ export default function CitizenSciencePanel({
                         onClick={() => setFilterTab('resueltos')}
                         className={`flex-1 py-1.5 rounded-lg text-2xs font-extrabold border-none cursor-pointer transition-all ${
                             filterTab === 'resueltos' 
-                                ? 'bg-white dark:bg-slate-700 text-emerald-700 dark:text-emerald-400 shadow-xs' 
+                                ? 'bg-white text-emerald-700 shadow-xs' 
                                 : 'text-slate-500 hover:text-slate-800'
                         }`}
                     >
@@ -118,7 +118,7 @@ export default function CitizenSciencePanel({
                         onClick={() => setFilterTab('caravanas')}
                         className={`flex-1 py-1.5 rounded-lg text-2xs font-extrabold border-none cursor-pointer transition-all ${
                             filterTab === 'caravanas' 
-                                ? 'bg-white dark:bg-slate-700 text-cyan-600 dark:text-cyan-400 shadow-xs' 
+                                ? 'bg-white text-emerald-700 shadow-xs' 
                                 : 'text-slate-500 hover:text-slate-800'
                         }`}
                     >
@@ -146,7 +146,7 @@ export default function CitizenSciencePanel({
                             ) : (
                                 <div className="citizen-reports-list flex flex-col gap-2 max-h-56 overflow-y-auto pr-1">
                                     {activeReports.map((report) => (
-                                        <div key={report.id} className="citizen-report-card-item p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700">
+                                        <div key={report.id} className="citizen-report-card-item p-2.5 rounded-xl bg-slate-50 border border-slate-200/80">
                                             <div className="flex items-start justify-between gap-2">
                                                 <div className="flex items-center gap-2 overflow-hidden">
                                                     {report.properties.foto ? (
@@ -156,12 +156,12 @@ export default function CitizenSciencePanel({
                                                             className="w-9 h-9 rounded-lg object-cover border border-slate-300 flex-shrink-0"
                                                         />
                                                     ) : (
-                                                        <div className="w-8 h-8 rounded-lg bg-slate-200 dark:bg-slate-700 flex items-center justify-center flex-shrink-0">
+                                                        <div className="w-8 h-8 rounded-lg bg-emerald-100/60 text-emerald-700 flex items-center justify-center flex-shrink-0">
                                                             <i className={`fa-solid ${getIconClass(report.properties.tipo_novedad)} text-xs`}></i>
                                                         </div>
                                                     )}
                                                     <div className="overflow-hidden">
-                                                        <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block truncate">
+                                                        <span className="text-xs font-bold text-slate-800 block truncate">
                                                             {report.properties.tipo_novedad.split('/')[0].trim()}
                                                         </span>
                                                         <span className="text-3xs text-slate-400">
@@ -173,7 +173,7 @@ export default function CitizenSciencePanel({
                                                 {/* Votos de respaldo */}
                                                 <button
                                                     onClick={() => onUpvoteReport && onUpvoteReport(report.properties.id)}
-                                                    className="py-1 px-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-2xs font-extrabold flex items-center gap-1 border-none cursor-pointer hover:bg-emerald-100"
+                                                    className="py-1 px-2 rounded-lg bg-emerald-50 text-emerald-700 text-2xs font-extrabold flex items-center gap-1 border-none cursor-pointer hover:bg-emerald-100"
                                                     title="Respaldar reporte"
                                                 >
                                                     <i className="fa-solid fa-circle-arrow-up"></i> {report.properties.numero_votos || 1}
@@ -181,12 +181,12 @@ export default function CitizenSciencePanel({
                                             </div>
 
                                             {report.properties.descripcion && (
-                                                <p className="text-2xs text-slate-600 dark:text-slate-300 mt-1 mb-0 italic line-clamp-2">
+                                                <p className="text-2xs text-slate-600 mt-1 mb-0 italic line-clamp-2">
                                                     "{report.properties.descripcion}"
                                                 </p>
                                             )}
 
-                                            <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-slate-200/50 dark:border-slate-700/50">
+                                            <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-slate-200/50">
                                                 <button
                                                     onClick={() => onZoomToReport(report.properties.coordenadas)}
                                                     className="text-3xs text-emerald-600 hover:text-emerald-700 font-bold bg-transparent border-none cursor-pointer p-0 flex items-center gap-1"
@@ -218,11 +218,11 @@ export default function CitizenSciencePanel({
                                 </p>
                             ) : (
                                 resolvedReports.map(report => (
-                                    <div key={report.id} className="p-2.5 rounded-xl bg-slate-50/60 dark:bg-slate-800/40 border border-slate-200/50 opacity-80 flex items-center justify-between">
+                                    <div key={report.id} className="p-2.5 rounded-xl bg-slate-50/60 border border-slate-200/50 opacity-80 flex items-center justify-between">
                                         <div className="flex items-center gap-2">
                                             <i className="fa-solid fa-check-double text-emerald-600 text-sm"></i>
                                             <div>
-                                                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 line-through">
+                                                <span className="text-xs font-semibold text-slate-700 line-through">
                                                     {report.properties.tipo_novedad.split('/')[0]}
                                                 </span>
                                                 <span className="block text-3xs text-emerald-600 font-bold">
@@ -246,19 +246,19 @@ export default function CitizenSciencePanel({
                     {filterTab === 'caravanas' && (
                         <div className="flex flex-col gap-2 max-h-56 overflow-y-auto pr-1">
                             {bikeCaravans.map(caravan => (
-                                <div key={caravan.id} className="p-3 rounded-2xl bg-cyan-50/50 dark:bg-cyan-950/30 border border-cyan-200/70 dark:border-cyan-800/50 flex flex-col gap-1.5">
+                                <div key={caravan.id} className="p-3 rounded-2xl bg-emerald-50/50 border border-emerald-200/70 flex flex-col gap-1.5">
                                     <div className="flex items-center justify-between">
-                                        <span className="text-xs font-black text-cyan-900 dark:text-cyan-200">
+                                        <span className="text-xs font-black text-emerald-900">
                                             {caravan.name}
                                         </span>
-                                        <span className="text-3xs font-extrabold px-1.5 py-0.5 rounded bg-cyan-200/80 dark:bg-cyan-900 text-cyan-800 dark:text-cyan-200">
+                                        <span className="text-3xs font-extrabold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">
                                             {caravan.badge}
                                         </span>
                                     </div>
                                     <p className="text-3xs text-slate-500 m-0">
                                         <strong>Punto de Encuentro:</strong> {caravan.meetingPoint.name}
                                     </p>
-                                    <div className="flex items-center justify-between text-3xs font-semibold text-cyan-700 dark:text-cyan-300 pt-1 border-t border-cyan-100 dark:border-cyan-900">
+                                    <div className="flex items-center justify-between text-3xs font-semibold text-emerald-700 pt-1 border-t border-emerald-100">
                                         <span>⏰ Salida: {caravan.meetingPoint.departureTime}</span>
                                         <span>🛡️ Bono: {caravan.riskReductionFactor} Riesgo</span>
                                     </div>
@@ -315,7 +315,7 @@ export default function CitizenSciencePanel({
                             value={reportDescription}
                             onChange={(e) => setReportDescription(e.target.value)}
                             placeholder="Ej. Poste apagado frente al puente peatonal..."
-                            className="text-xs p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                            className="text-xs p-2 rounded-xl border border-slate-200 bg-white"
                         />
                     </div>
 
@@ -341,7 +341,7 @@ export default function CitizenSciencePanel({
                             <button
                                 type="button"
                                 onClick={() => fileInputRef.current?.click()}
-                                className="py-2 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-600 dark:text-slate-300 flex items-center justify-center gap-2 cursor-pointer hover:bg-slate-100"
+                                className="py-2 px-3 rounded-xl border border-slate-200 bg-slate-50 text-xs text-slate-600 flex items-center justify-center gap-2 cursor-pointer hover:bg-emerald-50/50"
                             >
                                 <i className="fa-solid fa-camera text-emerald-600"></i> Tomar o Subir Foto
                             </button>

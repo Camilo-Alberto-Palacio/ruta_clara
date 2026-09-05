@@ -6,92 +6,56 @@ export default function MobileBottomDock({
     hasRoutes = false,
     activeRouteCount = 0,
     onEmergencySOS,
-    onToggleCaravanas,
-    onOpenReport,
-    onToggleZen,
+    onOpenLayers,
     isZenMode = false
 }) {
     return (
         <nav 
-            className="fixed bottom-4 left-3 right-3 z-40 max-w-md mx-auto rounded-3xl p-1.5 shadow-2xl backdrop-blur-2xl border flex items-center justify-around transition-all animate-slide-up"
+            className="fixed bottom-4 left-4 right-4 z-40 max-w-sm mx-auto rounded-3xl p-1.5 shadow-2xl border flex items-center justify-between transition-all animate-slide-up bg-white/98 border-slate-200/90"
             style={{
-                background: 'rgba(255, 255, 255, 0.92)',
-                borderColor: 'rgba(226, 232, 240, 0.85)',
-                boxShadow: '0 12px 36px rgba(0, 0, 0, 0.16)'
+                boxShadow: '0 12px 32px rgba(0, 0, 0, 0.12)'
             }}
-            aria-label="Barra de navegación ergonómica"
+            aria-label="Barra de navegación móvil minimalista"
         >
-            {/* 1. Buscar / Planificar */}
+            {/* 1. Planificar / Buscar Ruta */}
             <button
                 type="button"
-                onClick={onOpenSearch}
-                className="flex flex-col items-center justify-center p-2 rounded-2xl text-slate-700 hover:text-emerald-700 hover:bg-emerald-50 transition-all border-none bg-transparent cursor-pointer flex-1"
-                title="Buscar o planificar ruta"
+                onClick={hasRoutes ? onToggleResults : onOpenSearch}
+                className="flex flex-col items-center justify-center py-2 px-3 rounded-2xl text-slate-700 hover:text-emerald-700 hover:bg-emerald-50 transition-all border-none bg-transparent cursor-pointer flex-1 relative"
+                title={hasRoutes ? "Ver alternativas de ruta" : "Planificar ruta"}
             >
-                <i className="fa-solid fa-route text-base text-emerald-600"></i>
-                <span className="text-[10px] font-bold mt-1 tracking-tight">Ruta</span>
-            </button>
-
-            {/* 2. Resultados de Rutas (con badge) */}
-            <button
-                type="button"
-                onClick={onToggleResults}
-                className="relative flex flex-col items-center justify-center p-2 rounded-2xl text-slate-700 hover:text-emerald-700 hover:bg-emerald-50 transition-all border-none bg-transparent cursor-pointer flex-1"
-                title="Ver alternativas de ruta"
-            >
-                <i className="fa-solid fa-list-check text-base text-slate-700"></i>
-                <span className="text-[10px] font-bold mt-1 tracking-tight">Opciones</span>
+                <i className={`fa-solid ${hasRoutes ? 'fa-route' : 'fa-magnifying-glass'} text-lg text-emerald-600`}></i>
+                <span className="text-[11px] font-extrabold mt-1 text-slate-800">
+                    {hasRoutes ? 'Rutas' : 'Buscar'}
+                </span>
                 {hasRoutes && (
-                    <span className="absolute top-1 right-2 w-4 h-4 rounded-full bg-emerald-600 text-white text-[9px] font-black flex items-center justify-center shadow-xs animate-scale-up">
+                    <span className="absolute top-1 right-3 w-4 h-4 rounded-full bg-emerald-600 text-white text-[9px] font-black flex items-center justify-center shadow-xs">
                         {activeRouteCount || 3}
                     </span>
                 )}
             </button>
 
-            {/* 3. Botón Central SOS CAI (Emergencia - Hero Action) */}
+            {/* 2. Botón Central Hero SOS CAI (Emergencia) */}
             <button
                 type="button"
                 onClick={onEmergencySOS}
-                className="w-12 h-12 -my-2 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white flex flex-col items-center justify-center shadow-lg border-2 border-white/80 cursor-pointer animate-pulse transition-transform active:scale-95 flex-shrink-0"
+                className="w-13 h-13 -my-3 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white flex flex-col items-center justify-center shadow-lg border-2 border-white cursor-pointer active:scale-95 transition-transform flex-shrink-0"
+                style={{ boxShadow: '0 8px 20px rgba(225, 29, 72, 0.4)' }}
                 title="SOS Emergencia: Refugio en CAI más cercano"
             >
-                <i className="fa-solid fa-triangle-exclamation text-base"></i>
-                <span className="text-[8px] font-black tracking-wider uppercase mt-0.5">SOS</span>
+                <i className="fa-solid fa-triangle-exclamation text-lg"></i>
+                <span className="text-[9px] font-black tracking-wider uppercase mt-0.5">SOS</span>
             </button>
 
-            {/* 4. Bici-Caravanas */}
+            {/* 3. Capas y Opciones */}
             <button
                 type="button"
-                onClick={onToggleCaravanas}
-                className="flex flex-col items-center justify-center p-2 rounded-2xl text-slate-700 hover:text-emerald-700 hover:bg-emerald-50 transition-all border-none bg-transparent cursor-pointer flex-1"
-                title="Bici-Caravanas Comunitarias"
+                onClick={onOpenLayers}
+                className="flex flex-col items-center justify-center py-2 px-3 rounded-2xl text-slate-700 hover:text-emerald-700 hover:bg-emerald-50 transition-all border-none bg-transparent cursor-pointer flex-1"
+                title="Capas y Ajustes de Mapa"
             >
-                <i className="fa-solid fa-bicycle text-base text-emerald-600"></i>
-                <span className="text-[10px] font-bold mt-1 tracking-tight">Pelotón</span>
-            </button>
-
-            {/* 5. Reportar Incidencia Ciudadana */}
-            <button
-                type="button"
-                onClick={onOpenReport}
-                className="flex flex-col items-center justify-center p-2 rounded-2xl text-slate-700 hover:text-amber-700 hover:bg-amber-50 transition-all border-none bg-transparent cursor-pointer flex-1"
-                title="Reportar obstáculo o peligro"
-            >
-                <i className="fa-solid fa-bullhorn text-base text-amber-500"></i>
-                <span className="text-[10px] font-bold mt-1 tracking-tight">Reportar</span>
-            </button>
-
-            {/* 6. Modo Zen / Limpiar Pantalla */}
-            <button
-                type="button"
-                onClick={onToggleZen}
-                className={`flex flex-col items-center justify-center p-2 rounded-2xl transition-all border-none cursor-pointer flex-1 ${
-                    isZenMode ? 'bg-emerald-100 text-emerald-800 font-extrabold' : 'text-slate-500 hover:text-slate-800 bg-transparent'
-                }`}
-                title={isZenMode ? "Restaurar paneles" : "Modo Zen: Mapa despejado"}
-            >
-                <i className={`fa-solid ${isZenMode ? 'fa-eye' : 'fa-compress'} text-base`}></i>
-                <span className="text-[10px] font-bold mt-1 tracking-tight">{isZenMode ? 'Restaurar' : 'Zen'}</span>
+                <i className="fa-solid fa-sliders text-lg text-slate-700"></i>
+                <span className="text-[11px] font-extrabold mt-1 text-slate-800">Ajustes</span>
             </button>
         </nav>
     );

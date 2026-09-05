@@ -11,7 +11,7 @@ export const POPULAR_DESTINATIONS = [
 export default function QuickDestinationChips({ onSelectDestination, activeDestName = '' }) {
     return (
         <div className="flex flex-col gap-1.5 my-1.5">
-            <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
                 <i className="fa-solid fa-bolt-lightning text-amber-500"></i> Destinos Rápidos (1-Toque):
             </span>
             <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar py-0.5">

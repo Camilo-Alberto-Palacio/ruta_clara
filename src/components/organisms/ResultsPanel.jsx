@@ -70,9 +70,9 @@ export default function ResultsPanel({
                                     gap: '0.5rem',
                                     padding: '0.8rem 1rem',
                                     marginBottom: '0.85rem',
-                                    fontWeight: '700',
+                                    fontWeight: '800',
                                     fontSize: '0.92rem',
-                                    background: 'linear-gradient(135deg, #059669, #047857)',
+                                    background: 'linear-gradient(135deg, #10b981, #059669)',
                                     border: 'none',
                                     color: '#ffffff',
                                     borderRadius: 'var(--radius-md)',
@@ -82,7 +82,7 @@ export default function ResultsPanel({
                                 }}
                                 title="Navegar usando tu ubicación GPS en tiempo real"
                             >
-                                <i className="fa-solid fa-diamond-turn-right"></i> Cómo Llegar
+                                <i className="fa-solid fa-diamond-turn-right"></i> Iniciar Navegación GPS
                             </button>
 
                             {/* Route alternatives */}
@@ -114,19 +114,19 @@ export default function ResultsPanel({
                                     alignItems: 'center',
                                     justifyContent: 'center',
                                     gap: '0.4rem',
-                                    padding: '0.4rem 0.75rem',
-                                    marginTop: '0.5rem',
-                                    fontWeight: '600',
-                                    fontSize: '0.72rem',
-                                    background: 'transparent',
-                                    border: '1px solid rgba(148,163,184,0.25)',
-                                    color: 'var(--text-secondary)',
+                                    padding: '0.55rem 0.75rem',
+                                    marginTop: '0.65rem',
+                                    fontWeight: '700',
+                                    fontSize: '0.78rem',
+                                    background: '#f8fafc',
+                                    border: '1px solid #cbd5e1',
+                                    color: '#0f172a',
                                     borderRadius: 'var(--radius-md)',
                                     cursor: 'pointer'
                                 }}
                                 title="Ver simulación animada del recorrido"
                             >
-                                <i className="fa-solid fa-play" style={{ fontSize: '0.6rem' }}></i> Ver Simulación
+                                <i className="fa-solid fa-play text-emerald-600" style={{ fontSize: '0.65rem' }}></i> Ver Simulación Virtual
                             </button>
                         </div>
                     )}

@@ -72,8 +72,8 @@ export default function PriorityHeatmapPanel({
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md animate-fade-in">
-            <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-amber-500/30 w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-scale-up">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-emerald-950/30 backdrop-blur-sm animate-fade-in">
+            <div className="bg-white rounded-3xl shadow-2xl border border-amber-500/30 w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-scale-up">
                 {/* Cabecera */}
                 <div className="p-5 bg-gradient-to-r from-amber-600 via-orange-600 to-rose-700 text-white flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -100,8 +100,8 @@ export default function PriorityHeatmapPanel({
                 {/* Contenido */}
                 <div className="p-5 flex flex-col gap-4">
                     {/* Filtro por localidad */}
-                    <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    <div className="flex items-center justify-between p-3 rounded-2xl bg-emerald-50/50 border border-emerald-100">
+                        <span className="text-xs font-bold text-slate-700">
                             Filtrar Territorio:
                         </span>
                         <select
@@ -118,24 +118,24 @@ export default function PriorityHeatmapPanel({
 
                     {/* Resumen ejecutivo de entidades */}
                     <div className="grid grid-cols-3 gap-2">
-                        <div className="p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-center">
-                            <span className="text-[10px] font-extrabold uppercase text-amber-700 dark:text-amber-300">UAESP (Alumbrado)</span>
+                        <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-center">
+                            <span className="text-[10px] font-extrabold uppercase text-amber-700">UAESP (Alumbrado)</span>
                             <span className="text-lg font-black text-amber-600 block mt-0.5">
                                 {allRanked.filter(s => s.entity.includes('UAESP')).length} tramos
                             </span>
                             <span className="text-3xs text-slate-500">Requieren LED 200W</span>
                         </div>
 
-                        <div className="p-3 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-center">
-                            <span className="text-[10px] font-extrabold uppercase text-blue-700 dark:text-blue-300">IDU (Malla Vial)</span>
+                        <div className="p-3 rounded-2xl bg-blue-50 border border-blue-200 text-center">
+                            <span className="text-[10px] font-extrabold uppercase text-blue-700">IDU (Malla Vial)</span>
                             <span className="text-lg font-black text-blue-600 block mt-0.5">
                                 {allRanked.filter(s => s.entity.includes('IDU')).length} tramos
                             </span>
                             <span className="text-3xs text-slate-500">Repavimentación</span>
                         </div>
 
-                        <div className="p-3 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-center">
-                            <span className="text-[10px] font-extrabold uppercase text-rose-700 dark:text-rose-300">Policía / C4</span>
+                        <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-center">
+                            <span className="text-[10px] font-extrabold uppercase text-rose-700">Policía / C4</span>
                             <span className="text-lg font-black text-rose-600 block mt-0.5">
                                 {allRanked.filter(s => s.entity.includes('Policía')).length} tramos
                             </span>
@@ -153,7 +153,7 @@ export default function PriorityHeatmapPanel({
                             {topCritical.map((seg, idx) => (
                                 <div 
                                     key={seg.id}
-                                    className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex flex-col gap-2 hover:border-amber-400 transition-all"
+                                    className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col gap-2 hover:border-amber-400 transition-all"
                                 >
                                     <div className="flex items-start justify-between">
                                         <div className="flex items-center gap-2">
@@ -161,7 +161,7 @@ export default function PriorityHeatmapPanel({
                                                 {idx + 1}
                                             </span>
                                             <div>
-                                                <h4 className="text-xs font-black text-slate-900 dark:text-white m-0">
+                                                <h4 className="text-xs font-black text-slate-900 m-0">
                                                     {seg.name}
                                                 </h4>
                                                 <span className="text-3xs text-slate-500">
@@ -171,7 +171,7 @@ export default function PriorityHeatmapPanel({
                                         </div>
 
                                         <div className="text-right">
-                                            <span className="text-xs font-black px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-900/60 text-rose-700 dark:text-rose-300">
+                                            <span className="text-xs font-black px-2 py-0.5 rounded-full bg-rose-100 text-rose-700">
                                                 IPI: {seg.ipiScore}
                                             </span>
                                             <span className="block text-3xs text-slate-400 mt-0.5">{seg.urgency}</span>
@@ -179,12 +179,12 @@ export default function PriorityHeatmapPanel({
                                     </div>
 
                                     {/* Diagnóstico y acción */}
-                                    <div className="p-2.5 rounded-xl bg-white dark:bg-slate-850 border border-slate-200/80 dark:border-slate-700/80 text-2xs flex flex-col gap-1">
-                                        <div className="flex items-center justify-between text-slate-600 dark:text-slate-300">
+                                    <div className="p-2.5 rounded-xl bg-white border border-slate-200/80 text-2xs flex flex-col gap-1">
+                                        <div className="flex items-center justify-between text-slate-600">
                                             <span><strong>Entidad Destino:</strong> {seg.entity}</span>
                                             <span>💡 {seg.lightingType} ({seg.watts}W)</span>
                                         </div>
-                                        <p className="text-slate-700 dark:text-slate-300 m-0 font-medium">
+                                        <p className="text-slate-700 m-0 font-medium">
                                             🎯 <strong>Intervención Recomendada:</strong> {seg.action}
                                         </p>
                                     </div>

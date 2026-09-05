@@ -119,8 +119,8 @@ La combinación de alumbrado LED de alta potencia con presencia policial móvil 
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md animate-fade-in">
-            <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-emerald-500/30 w-full max-w-xl max-h-[90vh] overflow-y-auto animate-scale-up">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-emerald-950/30 backdrop-blur-sm animate-fade-in">
+            <div className="bg-white rounded-3xl shadow-2xl border border-emerald-500/30 w-full max-w-xl max-h-[90vh] overflow-y-auto animate-scale-up">
                 {/* Cabecera */}
                 <div className="p-5 bg-gradient-to-r from-emerald-600 to-teal-700 text-white flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -147,8 +147,8 @@ La combinación de alumbrado LED de alta potencia con presencia policial móvil 
                 {/* Cuerpo */}
                 <div className="p-5 flex flex-col gap-4">
                     {/* Selector de territorio */}
-                    <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 border border-slate-200">
+                        <span className="text-xs font-bold text-slate-700">
                             Localidad Objetivo:
                         </span>
                         <select 
@@ -168,11 +168,11 @@ La combinación de alumbrado LED de alta potencia con presencia policial móvil 
                             Políticas e Intervenciones Urbanas a Simular
                         </span>
 
-                        <label className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 cursor-pointer">
+                        <label className="flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-emerald-50/50 border border-slate-200 cursor-pointer transition-colors">
                             <div className="flex items-center gap-2.5">
                                 <i className="fa-solid fa-lightbulb text-amber-500 text-sm"></i>
                                 <div>
-                                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
+                                    <span className="text-xs font-bold text-slate-800 block">
                                         Modernización a Luminarias LED 200W
                                     </span>
                                     <span className="text-3xs text-slate-500">
@@ -188,11 +188,11 @@ La combinación de alumbrado LED de alta potencia con presencia policial móvil 
                             />
                         </label>
 
-                        <label className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 cursor-pointer">
+                        <label className="flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-emerald-50/50 border border-slate-200 cursor-pointer transition-colors">
                             <div className="flex items-center gap-2.5">
                                 <i className="fa-solid fa-shield-halved text-blue-500 text-sm"></i>
                                 <div>
-                                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
+                                    <span className="text-xs font-bold text-slate-800 block">
                                         Instalación de CAIs Móviles en Puntos Ciegos
                                     </span>
                                     <span className="text-3xs text-slate-500">
@@ -208,11 +208,11 @@ La combinación de alumbrado LED de alta potencia con presencia policial móvil 
                             />
                         </label>
 
-                        <label className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 cursor-pointer">
+                        <label className="flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-emerald-50/50 border border-slate-200 cursor-pointer transition-colors">
                             <div className="flex items-center gap-2.5">
                                 <i className="fa-solid fa-person-walking text-emerald-500 text-sm"></i>
                                 <div>
-                                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
+                                    <span className="text-xs font-bold text-slate-800 block">
                                         Guardias de Ruta / Gestores de Movilidad
                                     </span>
                                     <span className="text-3xs text-slate-500">
@@ -228,11 +228,11 @@ La combinación de alumbrado LED de alta potencia con presencia policial móvil 
                             />
                         </label>
 
-                        <label className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 cursor-pointer">
+                        <label className="flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-emerald-50/50 border border-slate-200 cursor-pointer transition-colors">
                             <div className="flex items-center gap-2.5">
                                 <i className="fa-solid fa-triangle-exclamation text-rose-500 text-sm"></i>
                                 <div>
-                                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
+                                    <span className="text-xs font-bold text-slate-800 block">
                                         Despeje y Mitigación de Frentes de Obra IDU
                                     </span>
                                     <span className="text-3xs text-slate-500">
@@ -251,21 +251,21 @@ La combinación de alumbrado LED de alta potencia con presencia policial móvil 
 
                     {/* Tarjetas Comparativas de Resultados */}
                     <div className="grid grid-cols-3 gap-2 mt-1">
-                        <div className="p-3 rounded-2xl bg-slate-100 dark:bg-slate-800 text-center flex flex-col justify-center">
+                        <div className="p-3 rounded-2xl bg-slate-100 text-center flex flex-col justify-center border border-slate-200">
                             <span className="text-[10px] text-slate-400 font-bold uppercase">Riesgo Base</span>
                             <span className="text-xl font-black text-rose-600 mt-0.5">{avgBaseScore}</span>
                             <span className="text-3xs text-slate-500">{baseHighRiskCount} tramos críticos</span>
                         </div>
 
-                        <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-800 text-center flex flex-col justify-center">
-                            <span className="text-[10px] text-emerald-700 dark:text-emerald-300 font-bold uppercase">Riesgo Simulado</span>
-                            <span className="text-xl font-black text-emerald-600 dark:text-emerald-400 mt-0.5">{avgSimScore}</span>
+                        <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-center flex flex-col justify-center">
+                            <span className="text-[10px] text-emerald-700 font-bold uppercase">Riesgo Simulado</span>
+                            <span className="text-xl font-black text-emerald-600 mt-0.5">{avgSimScore}</span>
                             <span className="text-3xs text-emerald-600">{simHighRiskCount} tramos críticos</span>
                         </div>
 
-                        <div className="p-3 rounded-2xl bg-teal-50 dark:bg-teal-950/50 border border-teal-300 dark:border-teal-800 text-center flex flex-col justify-center">
-                            <span className="text-[10px] text-teal-700 dark:text-teal-300 font-bold uppercase">Reducción Total</span>
-                            <span className="text-xl font-black text-teal-600 dark:text-teal-400 mt-0.5">-{reductionPercent}%</span>
+                        <div className="p-3 rounded-2xl bg-teal-50 border border-teal-200 text-center flex flex-col justify-center">
+                            <span className="text-[10px] text-teal-700 font-bold uppercase">Reducción Total</span>
+                            <span className="text-xl font-black text-teal-600 mt-0.5">-{reductionPercent}%</span>
                             <span className="text-3xs text-teal-600">{highRiskDelta} tramos salvados</span>
                         </div>
                     </div>

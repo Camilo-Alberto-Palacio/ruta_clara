@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Ruta Clara</string>
+    <string name="title_activity_main">Ruta Clara</string>
+    <string name="package_name">com.semillero.rutaclara</string>
+    <string name="custom_url_scheme">com.semillero.rutaclara</string>
+</resources>

@@ -101,8 +101,8 @@ ${auditorNotes ? `"${auditorNotes}"` : 'Sin observaciones adicionales registrada
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md animate-fade-in">
-            <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-teal-500/30 w-full max-w-xl max-h-[90vh] overflow-y-auto animate-scale-up">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-emerald-950/30 backdrop-blur-sm animate-fade-in">
+            <div className="bg-white rounded-3xl shadow-2xl border border-teal-500/30 w-full max-w-xl max-h-[90vh] overflow-y-auto animate-scale-up">
                 {/* Cabecera */}
                 <div className="p-5 bg-gradient-to-r from-teal-700 via-emerald-700 to-green-800 text-white flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -129,12 +129,12 @@ ${auditorNotes ? `"${auditorNotes}"` : 'Sin observaciones adicionales registrada
                 {/* Contenido */}
                 <div className="p-5 flex flex-col gap-4">
                     {/* Tramo e Índice CPTED actual */}
-                    <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                    <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between">
                         <div>
                             <span className="text-3xs font-extrabold uppercase tracking-wider text-slate-400">
                                 Tramo a Auditar
                             </span>
-                            <h4 className="text-xs font-black text-slate-800 dark:text-slate-100 m-0 mt-0.5">
+                            <h4 className="text-xs font-black text-slate-800 m-0 mt-0.5">
                                 {selectedSegment ? selectedSegment.name : 'Punto o tramo seleccionado'}
                             </h4>
                         </div>
@@ -155,8 +155,8 @@ ${auditorNotes ? `"${auditorNotes}"` : 'Sin observaciones adicionales registrada
                             1. Vigilancia Natural
                         </span>
                         <div className="grid grid-cols-2 gap-2 text-2xs">
-                            <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                            <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200">
+                                <label className="font-bold text-slate-700 block mb-1">
                                     Iluminación nocturna: {lightingScore}/5
                                 </label>
                                 <input 
@@ -165,8 +165,8 @@ ${auditorNotes ? `"${auditorNotes}"` : 'Sin observaciones adicionales registrada
                                     className="w-full accent-teal-600"
                                 />
                             </div>
-                            <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                            <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200">
+                                <label className="font-bold text-slate-700 block mb-1">
                                     Ojos en la calle: {surveillanceScore}/5
                                 </label>
                                 <input 
@@ -181,8 +181,8 @@ ${auditorNotes ? `"${auditorNotes}"` : 'Sin observaciones adicionales registrada
                             2. Control de Accesos y Escape
                         </span>
                         <div className="grid grid-cols-2 gap-2 text-2xs">
-                            <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                            <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200">
+                                <label className="font-bold text-slate-700 block mb-1">
                                     Segregación de calzada: {demarcationScore}/5
                                 </label>
                                 <input 
@@ -191,8 +191,8 @@ ${auditorNotes ? `"${auditorNotes}"` : 'Sin observaciones adicionales registrada
                                     className="w-full accent-teal-600"
                                 />
                             </div>
-                            <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                            <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200">
+                                <label className="font-bold text-slate-700 block mb-1">
                                     Vías de escape libres: {escapeRoutesScore}/5
                                 </label>
                                 <input 
@@ -207,8 +207,8 @@ ${auditorNotes ? `"${auditorNotes}"` : 'Sin observaciones adicionales registrada
                             3. Mantenimiento y Pavimento
                         </span>
                         <div className="grid grid-cols-2 gap-2 text-2xs">
-                            <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                            <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200">
+                                <label className="font-bold text-slate-700 block mb-1">
                                     Limpieza / Sin escombros: {maintenanceScore}/5
                                 </label>
                                 <input 
@@ -217,8 +217,8 @@ ${auditorNotes ? `"${auditorNotes}"` : 'Sin observaciones adicionales registrada
                                     className="w-full accent-teal-600"
                                 />
                             </div>
-                            <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                            <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200">
+                                <label className="font-bold text-slate-700 block mb-1">
                                     Calidad del pavimento: {pavementScore}/5
                                 </label>
                                 <input 
@@ -237,7 +237,7 @@ ${auditorNotes ? `"${auditorNotes}"` : 'Sin observaciones adicionales registrada
                                     type="text" 
                                     value={auditorName} 
                                     onChange={e => setAuditorName(e.target.value)} 
-                                    className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+                                    className="p-2 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none focus:border-emerald-500"
                                 />
                             </div>
                         </div>
@@ -248,7 +248,7 @@ ${auditorNotes ? `"${auditorNotes}"` : 'Sin observaciones adicionales registrada
                                 value={auditorNotes} 
                                 onChange={e => setAuditorNotes(e.target.value)} 
                                 placeholder="Puntos ciegos bajo el puente, luminarias intermitentes, cámaras de seguridad privadas visibles..."
-                                className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs resize-none h-16"
+                                className="p-2 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none focus:border-emerald-500 text-xs resize-none h-16"
                             />
                         </div>
                     </div>
