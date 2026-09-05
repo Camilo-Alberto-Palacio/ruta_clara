@@ -3,12 +3,14 @@
  * Provides natural, fluent, professional Spanish voice guidance for turns,
  * maneuvers, safety alerts, and traffic signals.
  * 
- * Uses @capacitor-community/text-to-speech on native Android devices for high-definition
- * system voices, and a bulletproof SpeechSynthesis engine on Web browsers with zero arcade beeps.
+ * Uses @capacitor-community/text-to-speech on native Android devices with category 'playback'
+ * and dynamic language negotiation (es-CO -> es-419 -> es-MX -> es-US -> es-ES -> es),
+ * with immediate fallback to Web Speech API and Web Audio API harmonic chimes.
  */
 
 import { TextToSpeech } from '@capacitor-community/text-to-speech';
 import { Capacitor } from '@capacitor/core';
+import { soundService } from './soundService';
 
 class AudioGuidanceService {
     constructor() {
@@ -22,6 +24,7 @@ class AudioGuidanceService {
         this.availableVoices = [];
         this.activeUtterance = null; // Prevent Chromium garbage collection bug
         this.isAudioUnlocked = false;
+        this.detectedNativeLang = null;
 
         // Queue
         this.queue = [];
@@ -33,10 +36,18 @@ class AudioGuidanceService {
                 this.synth.onvoiceschanged = () => this.refreshVoices();
             }
         }
+
+        // Auto-unlock audio on any mobile touch/click gesture
+        if (typeof window !== 'undefined') {
+            const autoUnlock = () => this.unlockAudio();
+            ['touchstart', 'touchend', 'pointerdown', 'click', 'keydown'].forEach(evt => {
+                window.addEventListener(evt, autoUnlock, { passive: true });
+            });
+        }
     }
 
     /**
-     * Unlocks audio on mobile / Android upon user interaction
+     * Unlocks audio contexts on mobile / Android upon user interaction
      */
     unlockAudio() {
         if (this.isAudioUnlocked) return;
@@ -49,6 +60,44 @@ class AudioGuidanceService {
                 // Ignore resume errors
             }
         }
+        soundService.ensureContext();
+    }
+
+    /**
+     * Detects best available Spanish language code supported by the native device
+     */
+    async getBestNativeLanguage() {
+        if (this.detectedNativeLang) return this.detectedNativeLang;
+        if (!this.isNative) return 'es';
+
+        const candidates = ['es-CO', 'es-419', 'es-MX', 'es-US', 'es-ES', 'es'];
+        for (const cand of candidates) {
+            try {
+                const res = await TextToSpeech.isLanguageSupported({ lang: cand });
+                if (res && res.supported) {
+                    this.detectedNativeLang = cand;
+                    return cand;
+                }
+            } catch (e) {
+                // Ignore test failure
+            }
+        }
+
+        try {
+            const { languages } = await TextToSpeech.getSupportedLanguages();
+            if (Array.isArray(languages)) {
+                const match = languages.find(l => typeof l === 'string' && (l.startsWith('es') || l.startsWith('spa')));
+                if (match) {
+                    this.detectedNativeLang = match;
+                    return match;
+                }
+            }
+        } catch (e) {
+            // Ignore
+        }
+
+        this.detectedNativeLang = 'es';
+        return 'es';
     }
 
     refreshVoices() {
@@ -83,6 +132,10 @@ class AudioGuidanceService {
         }));
     }
 
+    get selectedVoiceURI() {
+        return this.selectedVoice ? this.selectedVoice.voiceURI : '';
+    }
+
     setVoice(voiceURI) {
         this.refreshVoices();
         const match = this.availableVoices.find(v => v.voiceURI === voiceURI);
@@ -93,6 +146,7 @@ class AudioGuidanceService {
 
     setEnabled(val) {
         this.enabled = val;
+        soundService.setEnabled(val);
         if (!val) {
             this.stop();
         }
@@ -152,6 +206,13 @@ class AudioGuidanceService {
 
         if (!cleanText) return;
 
+        // Play navigation earcon cue & mobile vibration
+        if (isPriority) {
+            soundService.playNotification('alert');
+        } else if (cleanText.toLowerCase().includes('gira') || cleanText.toLowerCase().includes('metros') || cleanText.toLowerCase().includes('continúa')) {
+            soundService.playNotification('turn');
+        }
+
         const item = { text: cleanText, isPriority };
 
         if (isPriority) {
@@ -175,22 +236,33 @@ class AudioGuidanceService {
         const current = this.queue.shift();
 
         try {
-            // 1. If running on native Android APK, use native Android TTS
+            // 1. If running on native Android APK, use native Android TTS with playback category
             if (this.isNative) {
-                await TextToSpeech.speak({
-                    text: current.text,
-                    lang: 'es-CO',
-                    rate: 1.05,
-                    pitch: 1.0,
-                    volume: 1.0,
-                    category: 'ambient'
-                });
-                this.isProcessingQueue = false;
-                setTimeout(() => this.processQueue(), 300);
-                return;
+                let nativeSuccess = false;
+                try {
+                    const langToUse = await this.getBestNativeLanguage();
+                    await TextToSpeech.speak({
+                        text: current.text,
+                        lang: langToUse,
+                        rate: 1.02,
+                        pitch: 1.0,
+                        volume: 1.0,
+                        category: 'playback'
+                    });
+                    nativeSuccess = true;
+                } catch (nativeErr) {
+                    console.warn('Native Android TTS speak failed, trying Web Speech fallback:', nativeErr);
+                }
+
+                if (nativeSuccess) {
+                    this.isProcessingQueue = false;
+                    setTimeout(() => this.processQueue(), 250);
+                    return;
+                }
+                // Fallthrough to Web Speech API fallback if native rejected or failed
             }
 
-            // 2. Web Browser Fallback with Web Speech API
+            // 2. Web Browser or Fallback with Web Speech API
             if (!this.synth) {
                 this.isProcessingQueue = false;
                 return;
@@ -233,7 +305,7 @@ class AudioGuidanceService {
                 clearTimeout(safetyTimer);
                 this.activeUtterance = null;
                 this.isProcessingQueue = false;
-                setTimeout(() => this.processQueue(), 250);
+                setTimeout(() => this.processQueue(), 200);
             };
 
             utterance.onerror = (e) => {
@@ -241,16 +313,16 @@ class AudioGuidanceService {
                 console.warn('SpeechSynthesis note:', e.error || e);
                 this.activeUtterance = null;
                 this.isProcessingQueue = false;
-                setTimeout(() => this.processQueue(), 250);
+                setTimeout(() => this.processQueue(), 200);
             };
 
             this.synth.speak(utterance);
 
         } catch (err) {
-            console.warn('TextToSpeech error:', err);
+            console.warn('AudioGuidance speak error:', err);
             this.activeUtterance = null;
             this.isProcessingQueue = false;
-            setTimeout(() => this.processQueue(), 300);
+            setTimeout(() => this.processQueue(), 250);
         }
     }
 

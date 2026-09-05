@@ -18,6 +18,7 @@ import { accidentPoints } from './data/accidentPoints';
 import { caiPoints } from './data/caiPoints';
 import { fetchBogotaTrafficLights } from './utils/trafficLightsService';
 import { audioGuidance } from './utils/audioGuidanceService';
+import { soundService } from './utils/soundService';
 import { wakeLockService } from './utils/wakeLockService';
 import { generateRouteManeuvers, getUpcomingManeuver } from './utils/navigationManeuverService';
 import { fetchBogotaWeather } from './utils/weatherService';
@@ -104,6 +105,7 @@ export default function App() {
 
     const showToast = (message, type = 'info') => {
         const id = 'toast_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
+        soundService.playNotification(type);
         setToasts(prev => [...prev, { id, message, type }]);
         setTimeout(() => {
             setToasts(prev => prev.filter(t => t.id !== id));
@@ -1794,9 +1796,12 @@ export default function App() {
                             const nextVal = !voiceEnabled;
                             setVoiceEnabled(nextVal);
                             if (nextVal) {
-                                audioGuidance.speakRaw("Voz activada.");
+                                soundService.playNotification('success');
+                                audioGuidance.speakRaw("Voz y sonido activados.");
+                                showToast("🔊 Asistente de voz y sonido activados", "success");
                             } else {
                                 audioGuidance.stop();
+                                showToast("🔇 Asistente de voz silenciado", "info");
                             }
                         }}
                         className={`w-10 h-10 rounded-full flex items-center justify-center cursor-pointer border-none transition-all ${
@@ -1809,6 +1814,19 @@ export default function App() {
                         <i className={`fa-solid ${voiceEnabled ? 'fa-volume-high text-sm' : 'fa-volume-xmark text-sm'}`}></i>
                     </button>
 
+                    {/* Test Audio Chime & Voice button */}
+                    <button
+                        onClick={() => {
+                            soundService.playNotification('alert');
+                            audioGuidance.speakRaw("Probando notificaciones de audio en tu teléfono. Sistema operativo y altavoz vinculados correctamente.");
+                            showToast("🔔 Probando sonido y notificaciones...", "info");
+                        }}
+                        className="w-10 h-10 rounded-full bg-slate-100 text-slate-700 hover:bg-slate-200 flex items-center justify-center cursor-pointer border-none transition-all"
+                        title="Probar sonido y notificaciones"
+                    >
+                        <i className="fa-solid fa-bell text-xs"></i>
+                    </button>
+
                     {/* Change Voice button */}
                     <button
                         onClick={() => {
@@ -1819,8 +1837,10 @@ export default function App() {
                                 const nextIdx = (currIdx + 1) % voices.length;
                                 const nextVoice = voices[nextIdx];
                                 audioGuidance.setVoice(nextVoice.uri);
+                                soundService.playNotification('turn');
                                 audioGuidance.speakRaw(`Voz ${nextVoice.name}.`);
                             } else {
+                                soundService.playNotification('turn');
                                 audioGuidance.speakRaw("Voz en español seleccionada.");
                             }
                         }}
