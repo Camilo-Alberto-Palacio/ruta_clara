@@ -680,6 +680,71 @@ export default function App() {
                 audioGuidance.speakEvent('high_risk_zone_gps', 'Zona de precaución. Mantén el pedaleo.', 40, true);
             }
             lastRiskLevelRef.current = currentRisk;
+
+            // POI safety alerts in real-time GPS mode
+            const nearbyRobbery = robberyReportsRef.current.find(r => {
+                const distDeg = Math.sqrt(Math.pow(latitude - r.lat, 2) + Math.pow(longitude - r.lng, 2));
+                return (distDeg * 111000) <= 100;
+            });
+
+            const nearbyAccident = accidentPointsRef.current.find(a => {
+                const distDeg = Math.sqrt(Math.pow(latitude - a.lat, 2) + Math.pow(longitude - a.lng, 2));
+                return (distDeg * 111000) <= 100;
+            });
+
+            const nearbyCai = caiPointsRef.current.find(c => {
+                const distDeg = Math.sqrt(Math.pow(latitude - c.lat, 2) + Math.pow(longitude - c.lng, 2));
+                return (distDeg * 111000) <= 90;
+            });
+
+            const nearbyConst = constructionZonesRef.current.find(zone => {
+                const distDeg = Math.sqrt(Math.pow(latitude - zone.lat, 2) + Math.pow(longitude - zone.lng, 2));
+                return (distDeg * 111000) <= zone.radius;
+            });
+
+            const nearbyReport = citizenReportsRef.current.find(report => {
+                const rCoords = report.properties?.coordenadas;
+                if (!rCoords) return false;
+                const distDeg = Math.sqrt(Math.pow(latitude - rCoords[0], 2) + Math.pow(longitude - rCoords[1], 2));
+                return (distDeg * 111000) <= 80;
+            });
+
+            const nearbyLight = trafficLightsRef.current.find(light => {
+                const distDeg = Math.sqrt(
+                    Math.pow(latitude - light.coordinates[0], 2) +
+                    Math.pow(longitude - light.coordinates[1], 2)
+                );
+                return (distDeg * 111000) <= 65;
+            });
+
+            if (nearbyRobbery) {
+                setHudRecommendation(`🔴 Alerta de Hurto: ${nearbyRobbery.name}`);
+                audioGuidance.speakEvent(`rob_gps_${nearbyRobbery.id}`, `Alerta, reporte de hurto cercano en ${nearbyRobbery.name}. Mantente atento.`, 40, true);
+            } else if (nearbyAccident) {
+                setHudRecommendation(`🚗 Accidente de Tránsito: ${nearbyAccident.name}`);
+                audioGuidance.speakEvent(`acc_gps_${nearbyAccident.id}`, `Precaución, reporte de siniestro vial en ${nearbyAccident.name}.`, 40, true);
+            } else if (nearbyReport) {
+                const tipo = nearbyReport.properties.tipo_novedad;
+                if (tipo.toLowerCase().includes('luminaria') || tipo.toLowerCase().includes('lobo') || tipo.toLowerCase().includes('oscur')) {
+                    setHudRecommendation('💡 Tramo con baja iluminación. Enciende luces.');
+                    audioGuidance.speakEvent(`light_gps_${nearbyReport.id}`, 'Zona con poca iluminación reportada. Enciende tus luces.', 45, true);
+                } else if (tipo.toLowerCase().includes('hueco') || tipo.toLowerCase().includes('daño') || tipo.toLowerCase().includes('destructiva')) {
+                    setHudRecommendation('⚠️ Daño o bache en ciclorruta reportado.');
+                    audioGuidance.speakEvent(`pothole_gps_${nearbyReport.id}`, 'Bache o deterioro en la calzada adelante.', 45, true);
+                } else {
+                    setHudRecommendation(`📢 Reporte ciudadano: ${tipo.split('/')[0]}`);
+                    audioGuidance.speakEvent(`rep_gps_${nearbyReport.id}`, `Reporte ciudadano en la vía: ${tipo.split('/')[0]}.`, 45, true);
+                }
+            } else if (nearbyConst) {
+                setHudRecommendation('🚧 Obras viales del IDU adelante. Precaución.');
+                audioGuidance.speakEvent(`const_gps_${nearbyConst.lat}`, 'Obras viales adelante. Reduce la velocidad.', 50);
+            } else if (nearbyCai) {
+                setHudRecommendation(`👮 CAI de Policía: ${nearbyCai.name}`);
+                audioGuidance.speakEvent(`cai_gps_${nearbyCai.id}`, `CAI de policía ${nearbyCai.name} cercano.`, 60);
+            } else if (nearbyLight && nearbyLight.state === 'rojo') {
+                setHudRecommendation(`🚦 Semáforo en ROJO en ${nearbyLight.intersection || 'intersección'}. Detén la marcha.`);
+                audioGuidance.speakEvent(`light_red_gps_${nearbyLight.id || nearbyLight.intersection}`, 'Atención, semáforo en rojo. Detén la marcha.', 20, true);
+            }
         };
 
         const handleError = (err) => {
