@@ -4,7 +4,7 @@
  * and upcoming navigation prompts.
  */
 
-function calculateBearing(p1, p2) {
+export function calculateBearing(p1, p2) {
     const lat1 = (p1[0] * Math.PI) / 180;
     const lon1 = (p1[1] * Math.PI) / 180;
     const lat2 = (p2[0] * Math.PI) / 180;
@@ -15,10 +15,89 @@ function calculateBearing(p1, p2) {
     return Math.round(((Math.atan2(y, x) * 180) / Math.PI + 360) % 360);
 }
 
-function calculateDistanceMeters(p1, p2) {
+export function calculateDistanceMeters(p1, p2) {
+    if (!p1 || !p2) return 0;
     const dLat = (p2[0] - p1[0]) * 111000;
     const dLng = (p2[1] - p1[1]) * 111000 * Math.cos((p1[0] * Math.PI) / 180);
     return Math.sqrt(dLat * dLat + dLng * dLng);
+}
+
+/**
+ * Calculates perpendicular distance in meters from a point to the nearest segment of a route polyline.
+ * Used for dynamic off-route (rerouting) detection.
+ */
+export function calculateDistanceToRoute(point, routeCoordinates = []) {
+    if (!point || !routeCoordinates || routeCoordinates.length === 0) {
+        return { minDistanceMeters: Infinity, closestSegmentIndex: 0, closestCoordIndex: 0 };
+    }
+    if (routeCoordinates.length === 1) {
+        const dist = calculateDistanceMeters(point, routeCoordinates[0]);
+        return { minDistanceMeters: dist, closestSegmentIndex: 0, closestCoordIndex: 0 };
+    }
+
+    let minDistanceMeters = Infinity;
+    let closestSegmentIndex = 0;
+    let closestCoordIndex = 0;
+
+    const pLat = point[0];
+    const pLng = point[1];
+    const cosLat = Math.cos((pLat * Math.PI) / 180);
+
+    for (let i = 0; i < routeCoordinates.length - 1; i++) {
+        const a = routeCoordinates[i];
+        const b = routeCoordinates[i + 1];
+
+        // Convert delta to local meters projection around point
+        const ax = (a[1] - pLng) * 111000 * cosLat;
+        const ay = (a[0] - pLat) * 111000;
+        const bx = (b[1] - pLng) * 111000 * cosLat;
+        const by = (b[0] - pLat) * 111000;
+
+        const segDx = bx - ax;
+        const segDy = by - ay;
+        const segLenSq = segDx * segDx + segDy * segDy;
+
+        let distMeters = 0;
+        if (segLenSq < 0.0001) {
+            distMeters = Math.sqrt(ax * ax + ay * ay);
+        } else {
+            // Project origin (0, 0) in relative meters onto segment AB
+            const t = Math.max(0, Math.min(1, -(ax * segDx + ay * segDy) / segLenSq));
+            const projX = ax + t * segDx;
+            const projY = ay + t * segDy;
+            distMeters = Math.sqrt(projX * projX + projY * projY);
+        }
+
+        if (distMeters < minDistanceMeters) {
+            minDistanceMeters = distMeters;
+            closestSegmentIndex = i;
+            closestCoordIndex = (Math.sqrt(ax * ax + ay * ay) <= Math.sqrt(bx * bx + by * by)) ? i : i + 1;
+        }
+    }
+
+    return {
+        minDistanceMeters: Math.round(minDistanceMeters * 10) / 10,
+        closestSegmentIndex,
+        closestCoordIndex
+    };
+}
+
+/**
+ * Calculates exact remaining route distance in meters from current coordinate along remaining route segments
+ */
+export function calculateRemainingRouteDistance(currentCoord, routeCoordinates = [], closestIndex = 0) {
+    if (!routeCoordinates || routeCoordinates.length === 0 || !currentCoord) return 0;
+    const lastIdx = routeCoordinates.length - 1;
+    if (closestIndex >= lastIdx) {
+        return Math.round(calculateDistanceMeters(currentCoord, routeCoordinates[lastIdx]));
+    }
+
+    let totalRemaining = calculateDistanceMeters(currentCoord, routeCoordinates[Math.min(closestIndex + 1, lastIdx)]);
+    for (let i = closestIndex + 1; i < lastIdx; i++) {
+        totalRemaining += calculateDistanceMeters(routeCoordinates[i], routeCoordinates[i + 1]);
+    }
+
+    return Math.round(totalRemaining);
 }
 
 /**
@@ -121,16 +200,29 @@ export function generateRouteManeuvers(coordinates = []) {
 export function getUpcomingManeuver(cyclistCoord, maneuvers = [], cyclistIndex = 0) {
     if (!maneuvers || maneuvers.length === 0 || !cyclistCoord) return null;
 
-    // Find first maneuver that is ahead of the current coordinate
-    for (const m of maneuvers) {
+    // Filter maneuvers that are strictly ahead of current progress or within immediate 15m radius
+    for (let i = 0; i < maneuvers.length; i++) {
+        const m = maneuvers[i];
         if (m.type === 'start') continue;
+
         const dist = calculateDistanceMeters(cyclistCoord, m.coord);
-        if (m.index >= cyclistIndex || dist < 300) {
+
+        // If maneuver index is ahead of cyclist index OR within immediate 15m trigger zone
+        if (m.index >= cyclistIndex || dist <= 15) {
             return {
                 maneuver: m,
                 distanceMeters: Math.round(dist)
             };
         }
+    }
+
+    // If past all turn maneuvers, return the destination maneuver
+    const destManeuver = maneuvers.find(m => m.type === 'destination') || maneuvers[maneuvers.length - 1];
+    if (destManeuver) {
+        return {
+            maneuver: destManeuver,
+            distanceMeters: Math.round(calculateDistanceMeters(cyclistCoord, destManeuver.coord))
+        };
     }
 
     return null;

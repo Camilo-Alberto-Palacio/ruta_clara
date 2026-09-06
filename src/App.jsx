@@ -20,7 +20,15 @@ import { fetchBogotaTrafficLights } from './utils/trafficLightsService';
 import { audioGuidance } from './utils/audioGuidanceService';
 import { soundService } from './utils/soundService';
 import { wakeLockService } from './utils/wakeLockService';
-import { generateRouteManeuvers, getUpcomingManeuver } from './utils/navigationManeuverService';
+import { 
+    generateRouteManeuvers, 
+    getUpcomingManeuver, 
+    calculateBearing, 
+    calculateDistanceMeters, 
+    calculateDistanceToRoute, 
+    calculateRemainingRouteDistance 
+} from './utils/navigationManeuverService';
+import DestinationArrivalModal from './components/molecules/DestinationArrivalModal';
 import { fetchBogotaWeather } from './utils/weatherService';
 import { calculateRouteElevationProfile } from './utils/elevationService';
 import SafeHavenEmergencyModal from './components/molecules/SafeHavenEmergencyModal';
@@ -223,6 +231,11 @@ export default function App() {
     const [isCameraLocked, setIsCameraLocked] = useState(true);
     const cyclistIndexRef = useRef(0);
     const lastRiskLevelRef = useRef('Bajo');
+    const [isArrivalModalOpen, setIsArrivalModalOpen] = useState(false);
+    const offRouteTicksRef = useRef(0);
+    const isReroutingRef = useRef(false);
+    const minDistToDestRef = useRef(Infinity);
+    const lastGpsCoordRef = useRef(null);
 
     // Mobile popover states and bottom sheet active tab
     const [mobileLayersOpen, setMobileLayersOpen] = useState(false);
@@ -436,6 +449,18 @@ export default function App() {
         return dense;
     }, [activeRouteId, generatedRoutes]);
 
+    // Current upcoming maneuver info for Cockpit HUD
+    const currentManeuverInfo = useMemo(() => {
+        if (!activeRoute || !cyclistCoords || !routeManeuvers || routeManeuvers.length === 0) return null;
+        return getUpcomingManeuver(cyclistCoords, routeManeuvers, cyclistIndex);
+    }, [activeRoute, cyclistCoords, routeManeuvers, cyclistIndex]);
+
+    // Precise remaining route distance in meters (replaces index approximation)
+    const remainingMetersToDest = useMemo(() => {
+        if (!activeRoute || !activeRoute.coordinates || !cyclistCoords) return 0;
+        return calculateRemainingRouteDistance(cyclistCoords, activeRoute.coordinates, cyclistIndex);
+    }, [activeRoute, cyclistCoords, cyclistIndex]);
+
     const trafficLightsRef = useRef(trafficLights);
     trafficLightsRef.current = trafficLights;
 
@@ -479,7 +504,9 @@ export default function App() {
                 setSpeedKmh(0);
                 setNextTrafficLight(null);
                 audioGuidance.speakRaw("¡Felicidades! Has llegado a tu destino.", true);
+                soundService.playNotification('success');
                 showToast("🎉 ¡Has llegado a tu destino de forma segura!", "success");
+                setIsArrivalModalOpen(true);
                 return;
             }
 
@@ -699,25 +726,93 @@ export default function App() {
 
         const handleSuccess = (position) => {
             const { latitude, longitude, heading, speed } = position.coords;
-            setCyclistCoords([latitude, longitude]);
+            const currentPt = [latitude, longitude];
+            setCyclistCoords(currentPt);
 
-            if (speed !== null && speed !== undefined) {
+            // Update heading/bearing for vehicle puck
+            if (heading !== null && heading !== undefined && !isNaN(heading) && heading >= 0) {
+                setCyclistBearing(Math.round(heading));
+            } else if (lastGpsCoordRef.current) {
+                const movedDist = calculateDistanceMeters(lastGpsCoordRef.current, currentPt);
+                if (movedDist >= 2.5) {
+                    const calculatedBrng = calculateBearing(lastGpsCoordRef.current, currentPt);
+                    setCyclistBearing(calculatedBrng);
+                }
+            }
+            lastGpsCoordRef.current = currentPt;
+
+            if (speed !== null && speed !== undefined && !isNaN(speed)) {
                 setSpeedKmh(Math.round(speed * 3.6));
             } else {
-                setSpeedKmh(15); // realistic cycling speed fallback
+                setSpeedKmh(16);
             }
 
-            // Find closest coordinate index on the active route
-            let closestIdx = 0;
-            let minDist = Infinity;
-            activeRoute.coordinates.forEach((coord, idx) => {
-                const dist = Math.sqrt(Math.pow(coord[0] - latitude, 2) + Math.pow(coord[1] - longitude, 2));
-                if (dist < minDist) {
-                    minDist = dist;
-                    closestIdx = idx;
-                }
-            });
+            const destPt = activeRoute.coordinates[activeRoute.coordinates.length - 1];
+            const distToDest = calculateDistanceMeters(currentPt, destPt);
+
+            // Update minimum recorded distance to destination
+            if (distToDest < minDistToDestRef.current) {
+                minDistToDestRef.current = distToDest;
+            }
+
+            // --- 1. ARRIVAL DETECTION ---
+            // If within 40m, or passed destination (reached <= 45m and now distance starts increasing)
+            const hasReachedDest = distToDest <= 40;
+            const hasPassedDest = minDistToDestRef.current <= 45 && (distToDest >= minDistToDestRef.current + 8) && distToDest <= 70;
+
+            if (hasReachedDest || hasPassedDest) {
+                setNavStatus('stopped');
+                setIsNavigating(false);
+                setIsCameraLocked(true);
+                setSpeedKmh(0);
+                setNextTrafficLight(null);
+                audioGuidance.speakRaw("¡Felicidades! Has llegado a tu destino.", true);
+                soundService.playNotification('success');
+                showToast("🎉 ¡Has llegado a tu destino de forma segura!", "success");
+                setIsArrivalModalOpen(true);
+                return;
+            }
+
+            // --- 2. OFF-ROUTE & PROGRESS EVALUATION ---
+            const routeDistInfo = calculateDistanceToRoute(currentPt, activeRoute.coordinates);
+            const distToRoute = routeDistInfo.minDistanceMeters;
+            const closestIdx = routeDistInfo.closestCoordIndex;
+
             setCyclistIndex(closestIdx);
+            cyclistIndexRef.current = closestIdx;
+
+            // Trigger dynamic re-route if cyclist deviated from planned road corridor
+            if (distToDest > 60 && distToRoute > 45) {
+                offRouteTicksRef.current++;
+                if (offRouteTicksRef.current >= 2 || distToRoute > 75) {
+                    offRouteTicksRef.current = 0;
+                    handleDynamicReroute(currentPt, destPt);
+                    return;
+                }
+            } else {
+                offRouteTicksRef.current = 0;
+            }
+
+            // --- 3. TURN-BY-TURN VOICE GUIDANCE IN GPS MODE ---
+            if (routeManeuvers && routeManeuvers.length > 0) {
+                const upcoming = getUpcomingManeuver(currentPt, routeManeuvers, closestIdx);
+                if (upcoming && upcoming.maneuver.type !== 'destination') {
+                    const { maneuver, distanceMeters } = upcoming;
+                    if (distanceMeters <= 160 && distanceMeters >= 110 && !maneuver.announced150) {
+                        maneuver.announced150 = true;
+                        setHudRecommendation(`↗️ En 150m: ${maneuver.shortText}`);
+                        audioGuidance.speak(`En ciento cincuenta metros, ${maneuver.instruction.toLowerCase()}.`);
+                    } else if (distanceMeters <= 60 && distanceMeters >= 30 && !maneuver.announced50) {
+                        maneuver.announced50 = true;
+                        setHudRecommendation(`↩️ En 50m: ${maneuver.shortText}`);
+                        audioGuidance.speak(`En cincuenta metros, prepárate para ${maneuver.instruction.toLowerCase()}.`);
+                    } else if (distanceMeters < 20 && !maneuver.announcedNow) {
+                        maneuver.announcedNow = true;
+                        setHudRecommendation(`🔄 ${maneuver.shortText} ahora`);
+                        audioGuidance.speak(`${maneuver.instruction} ahora.`);
+                    }
+                }
+            }
 
             // Dynamic recommendations based on current coordinate
             const riskInfo = evaluateCoordinateRisk(
@@ -838,7 +933,7 @@ export default function App() {
         });
 
         return () => navigator.geolocation.clearWatch(watchId);
-    }, [navStatus, navigationMode, activeRouteId, generatedRoutes, segments, simulationState, constructionZones, citizenReports]);
+    }, [navStatus, navigationMode, activeRouteId, generatedRoutes, segments, simulationState, constructionZones, citizenReports, routeManeuvers, handleDynamicReroute]);
 
     // 5. Update default origin when localidad changes (only if no GPS user location)
     useEffect(() => {
@@ -1199,6 +1294,127 @@ export default function App() {
         return [];
     };
 
+    // 12b. Route Object Builder (Reusable for initial plot and dynamic re-routing)
+    const buildRouteObjects = useCallback((routesData, segs, simState, constZones, citReports, tfJams, tfLights) => {
+        return routesData.map((route, idx) => {
+            const leafletCoords = route.geometry.coordinates.map(pt => [pt[1], pt[0]]);
+            const riskDetails = calculateRouteAverageRisk(
+                leafletCoords, 
+                segs, 
+                simState, 
+                constZones, 
+                simState?.showConstruction,
+                citReports
+            );
+            const routeCost = calculateRouteCost(
+                leafletCoords,
+                segs,
+                simState,
+                constZones,
+                simState?.showConstruction,
+                citReports
+            );
+
+            // Detect traffic jams on this route
+            const jamsOnRoute = detectTrafficJamsOnRoute(leafletCoords, tfJams);
+            const totalDelayMinutes = jamsOnRoute.reduce((sum, j) => sum + j.delayMinutes, 0);
+            const baseDurationMin = Math.round(route.duration / 60);
+
+            // Perfil de elevación y altimetría
+            const elevationProfile = calculateRouteElevationProfile(leafletCoords);
+
+            // Asignación de perfiles multicriterio (CU-02)
+            let profileTag = '⏱️ Exprés';
+            let routeName = `Ruta ${idx + 1}`;
+            if (idx === 0) {
+                profileTag = '🛡️ Blindada';
+                routeName = 'Ruta 1 (Más Segura)';
+            } else if (idx === 1) {
+                profileTag = '⛰️ Menos Pendiente';
+                routeName = 'Ruta 2 (Fácil Pedaleo)';
+            } else {
+                profileTag = '⏱️ Exprés';
+                routeName = `Ruta ${idx + 1} (Directa)`;
+            }
+            
+            // Calcular semáforos presentes a lo largo de esta ruta
+            const lightsOnRoute = (tfLights || []).filter(light => {
+                return leafletCoords.some(pt => {
+                    const distDeg = Math.sqrt(
+                        Math.pow(pt[0] - light.coordinates[0], 2) + 
+                        Math.pow(pt[1] - light.coordinates[1], 2)
+                    );
+                    return (distDeg * 111000) <= 80;
+                });
+            });
+            const greenCount = lightsOnRoute.filter(l => l.state === 'verde').length;
+
+            return {
+                id: `route_${idx}`,
+                name: routeName,
+                profileTag,
+                elevationProfile,
+                distanceKm: (route.distance / 1000).toFixed(1),
+                durationMin: String(baseDurationMin),
+                durationWithTraffic: String(baseDurationMin + totalDelayMinutes),
+                coordinates: leafletCoords,
+                avgRiskScore: riskDetails.avgScore,
+                maxRiskLevel: riskDetails.maxLevel,
+                trafficJamsOnRoute: jamsOnRoute,
+                totalDelayMinutes: totalDelayMinutes,
+                cost: routeCost.toFixed(1),
+                trafficLightsCount: lightsOnRoute.length,
+                greenLightsCount: greenCount,
+                trafficLightsOnRoute: lightsOnRoute
+            };
+        });
+    }, []);
+
+    // 12c. Real-time Dynamic Rerouting Engine (Off-route recovery)
+    const handleDynamicReroute = useCallback(async (currentCoord, destCoord) => {
+        if (isReroutingRef.current || !destCoord) return;
+        isReroutingRef.current = true;
+
+        setHudRecommendation("🔄 Recalculando ruta hacia el destino...");
+        audioGuidance.speakRaw("Has salido de la ruta. Recalculando trayecto.", true);
+        soundService.playNotification('warning');
+        showToast("🔄 Fuera de ruta: Recalculando hacia tu destino...", "info");
+
+        try {
+            const originObj = { lat: currentCoord[0], lng: currentCoord[1] };
+            const destObj = Array.isArray(destCoord) ? { lat: destCoord[0], lng: destCoord[1] } : destCoord;
+            const routesData = await fetchOSRMAlternatives(originObj, destObj);
+
+            if (routesData && routesData.length > 0) {
+                const calculated = buildRouteObjects(
+                    routesData, 
+                    segmentsRef.current, 
+                    simulationStateRef.current, 
+                    constructionZonesRef.current, 
+                    citizenReportsRef.current, 
+                    trafficJams, 
+                    trafficLightsRef.current
+                );
+                setGeneratedRoutes(calculated);
+                setActiveRouteId('route_0');
+                cyclistIndexRef.current = 0;
+                setCyclistIndex(0);
+                minDistToDestRef.current = Infinity;
+
+                audioGuidance.speak("Ruta recalculada. Continúa hacia tu destino.", false);
+                showToast("✅ Ruta recalculada con éxito", "success");
+            } else {
+                console.warn("No se pudieron obtener alternativas de recálculo dinámico");
+            }
+        } catch (err) {
+            console.error("Error en recálculo dinámico de ruta:", err);
+        } finally {
+            setTimeout(() => {
+                isReroutingRef.current = false;
+            }, 3000);
+        }
+    }, [buildRouteObjects]);
+
     // 13. Trigger route plotting calculations (supports optional overrides for instant 1-touch chips)
     const handleCalculateRoute = async (overrideOrigin = null, overrideDest = null, overrideDestName = null) => {
         const destText = overrideDestName || destInput;
@@ -1269,78 +1485,15 @@ export default function App() {
             return;
         }
 
-        const calculated = routesData.map((route, idx) => {
-            const leafletCoords = route.geometry.coordinates.map(pt => [pt[1], pt[0]]);
-            const riskDetails = calculateRouteAverageRisk(
-                leafletCoords, 
-                segments, 
-                simulationState, 
-                constructionZones, 
-                simulationState.showConstruction,
-                citizenReports
-            );
-            const routeCost = calculateRouteCost(
-                leafletCoords,
-                segments,
-                simulationState,
-                constructionZones,
-                simulationState.showConstruction,
-                citizenReports
-            );
-
-            // Detect traffic jams on this route
-            const jamsOnRoute = detectTrafficJamsOnRoute(leafletCoords, trafficJams);
-            const totalDelayMinutes = jamsOnRoute.reduce((sum, j) => sum + j.delayMinutes, 0);
-            const baseDurationMin = Math.round(route.duration / 60);
-
-            // Perfil de elevación y altimetría
-            const elevationProfile = calculateRouteElevationProfile(leafletCoords);
-
-            // Asignación de perfiles multicriterio (CU-02)
-            let profileTag = '⏱️ Exprés';
-            let routeName = `Ruta ${idx + 1}`;
-            if (idx === 0) {
-                profileTag = '🛡️ Blindada';
-                routeName = 'Ruta 1 (Más Segura)';
-            } else if (idx === 1) {
-                profileTag = '⛰️ Menos Pendiente';
-                routeName = 'Ruta 2 (Fácil Pedaleo)';
-            } else {
-                profileTag = '⏱️ Exprés';
-                routeName = `Ruta ${idx + 1} (Directa)`;
-            }
-            
-            // Calcular semáforos presentes a lo largo de esta ruta
-            const lightsOnRoute = (trafficLights || []).filter(light => {
-                return leafletCoords.some(pt => {
-                    const distDeg = Math.sqrt(
-                        Math.pow(pt[0] - light.coordinates[0], 2) + 
-                        Math.pow(pt[1] - light.coordinates[1], 2)
-                    );
-                    return (distDeg * 111000) <= 80;
-                });
-            });
-            const greenCount = lightsOnRoute.filter(l => l.state === 'verde').length;
-
-            return {
-                id: `route_${idx}`,
-                name: routeName,
-                profileTag,
-                elevationProfile,
-                distanceKm: (route.distance / 1000).toFixed(1),
-                durationMin: String(baseDurationMin),
-                durationWithTraffic: String(baseDurationMin + totalDelayMinutes),
-                coordinates: leafletCoords,
-                avgRiskScore: riskDetails.avgScore,
-                maxRiskLevel: riskDetails.maxLevel,
-                trafficJamsOnRoute: jamsOnRoute,
-                totalDelayMinutes: totalDelayMinutes,
-                cost: routeCost.toFixed(1),
-                trafficLightsCount: lightsOnRoute.length,
-                greenLightsCount: greenCount,
-                trafficLightsOnRoute: lightsOnRoute
-            };
-        });
+        const calculated = buildRouteObjects(
+            routesData,
+            segments,
+            simulationState,
+            constructionZones,
+            citizenReports,
+            trafficJams,
+            trafficLights
+        );
 
         setGeneratedRoutes(calculated);
         setActiveRouteId('route_0');
@@ -1449,6 +1602,11 @@ export default function App() {
         cyclistIndexRef.current = 0;
         setCyclistIndex(0);
         setCyclistCoords(activeRoute.coordinates[0]);
+        offRouteTicksRef.current = 0;
+        isReroutingRef.current = false;
+        minDistToDestRef.current = Infinity;
+        lastGpsCoordRef.current = null;
+        setIsArrivalModalOpen(false);
 
         // Reset maneuvers announcement flags
         if (routeManeuvers && routeManeuvers.length > 0) {
@@ -1685,6 +1843,11 @@ export default function App() {
         return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     };
 
+    const activeManeuver = currentManeuverInfo?.maneuver;
+    const activeManeuverDist = currentManeuverInfo ? currentManeuverInfo.distanceMeters : remainingMetersToDest;
+    const maneuverIcon = activeManeuver?.icon || (remainingMetersToDest <= 40 ? 'fa-flag-checkered' : 'fa-arrow-up');
+    const displayDist = remainingMetersToDest <= 40 ? '0 m' : (activeManeuverDist >= 1000 ? `${(activeManeuverDist / 1000).toFixed(1)} km` : `${activeManeuverDist} m`);
+
     const cockpitHUD = isNavigating && activeRoute && (
         <div className="fixed inset-0 pointer-events-none z-50 flex flex-col justify-between p-4 animate-fade-in select-none">
             {/* 1. Top Navigation Maneuver Banner - Crisp Pure White & Emerald Green */}
@@ -1693,14 +1856,16 @@ export default function App() {
                 style={{ background: '#ffffff', color: '#0f172a', borderColor: 'rgba(16, 185, 129, 0.4)', boxShadow: '0 10px 30px rgba(0, 0, 0, 0.15)' }}
             >
                 <div className="w-12 h-12 rounded-2xl bg-emerald-600 border border-emerald-500 flex items-center justify-center flex-shrink-0 shadow-md">
-                    <i className="fa-solid fa-arrow-turn-up text-xl text-white"></i>
+                    <i className={`fa-solid ${maneuverIcon} text-xl text-white`}></i>
                 </div>
                 <div className="flex flex-col flex-1 overflow-hidden">
                     <div className="flex items-baseline gap-1.5">
                         <span className="text-xl font-black text-slate-900 tracking-tight">
-                            {Math.max(15, Math.round((1 - (cyclistIndex / Math.max(1, activeRoute.coordinates.length))) * (parseFloat(activeRoute.distanceKm) * 1000)))} m
+                            {displayDist}
                         </span>
-                        <span className="text-2xs text-slate-500 uppercase font-bold">hacia</span>
+                        <span className="text-2xs text-slate-500 uppercase font-bold">
+                            {activeManeuver?.shortText || 'hacia'}
+                        </span>
                     </div>
                     <span className="text-xs font-extrabold text-emerald-600 truncate">
                         {destInput ? destInput.split(',')[0] : 'Destino'}
@@ -1785,7 +1950,11 @@ export default function App() {
                     <span className="text-xs font-bold text-slate-500 flex items-center gap-1.5 mt-0.5">
                         <span>{activeRoute.durationMin} min</span>
                         <span>•</span>
-                        <span>{activeRoute.distanceKm} km</span>
+                        <span>
+                            {remainingMetersToDest >= 1000 
+                                ? `${(remainingMetersToDest / 1000).toFixed(1)} km` 
+                                : `${remainingMetersToDest} m`}
+                        </span>
                     </span>
                 </div>
 
@@ -2683,6 +2852,20 @@ export default function App() {
                 onClose={() => setIsCptedAuditOpen(false)}
                 selectedSegment={selectedSegmentId ? segments[selectedSegmentId] : null}
                 onSaveAudit={handleSaveCptedAudit}
+            />
+
+            {/* Modal de Llegada a Destino */}
+            <DestinationArrivalModal
+                isOpen={isArrivalModalOpen}
+                onClose={() => setIsArrivalModalOpen(false)}
+                destinationName={destInput || 'Destino'}
+                distanceKm={activeRoute ? activeRoute.distanceKm : '0.0'}
+                durationMin={activeRoute ? activeRoute.durationMin : '0'}
+                avgRiskScore={activeRoute ? activeRoute.avgRiskScore : '2.4'}
+                onStartNewRoute={() => {
+                    setIsArrivalModalOpen(false);
+                    handleClearRoute();
+                }}
             />
 
             {/* ==================== SUITE DE NOTIFICACIONES & USABILIDAD ==================== */}
