@@ -6,6 +6,7 @@ import { robberyReports } from '../../data/robberyReports';
 import { accidentPoints } from '../../data/accidentPoints';
 import { bikeCaravans } from '../../data/bikeCaravans';
 import { calculateRisk, evaluateCoordinateRisk } from '../../utils/riskCalculator';
+import { fetchGeoJSONWithCache } from '../../utils/geoCache';
 
 // Helper to check if a point is inside a polygon (Ray-Casting Algorithm)
 function isPointInPolygon(point, polygonCoords) {
@@ -218,9 +219,8 @@ export default function MapComponent({
 
         tileLayerRef.current = initialTiles;
 
-        // Fetch official Bogotá Localities GeoJSON
-        fetch(`${import.meta.env.BASE_URL}localidades.json`)
-            .then(res => res.json())
+        // Load official Bogotá Localities GeoJSON via IndexedDB Cache (7-day TTL + offline fallback)
+        fetchGeoJSONWithCache('bogota_localidades', `${import.meta.env.BASE_URL}localidades.json`)
             .then(data => {
                 if (!active || !mapRef.current) return;
 
@@ -1062,24 +1062,32 @@ export default function MapComponent({
 
             if (!shouldShowMarker(coords[0], coords[1], activeRouteCoords, currentZoom, 11, 800)) return;
 
-            const tipo = report.properties.tipo_novedad;
+            // Expiración visual de 60 minutos para reportes rápidos en ruta
+            if (report.properties.isQuickReport && report.properties.timestamp) {
+                if (Date.now() - report.properties.timestamp > 60 * 60 * 1000) {
+                    return; // expirado visualmente
+                }
+            }
+
+            const tipo = report.properties.tipo_novedad || '';
             const votos = report.properties.numero_votos;
             const fecha = report.properties.fecha_creacion;
             const estado = report.properties.estado;
+            const isQuick = Boolean(report.properties.isQuickReport);
 
             // Determine color and icon
             let color = '#f59e0b'; // Amber
             let icon = 'fa-triangle-exclamation';
 
-            if (tipo.includes('Luminaria') || tipo.includes('lobo')) {
+            if (tipo.includes('Luminaria') || tipo.includes('lobo') || tipo.includes('apagada')) {
                 color = '#f59e0b';
                 icon = 'fa-lightbulb';
-            } else if (tipo.includes('Hueco') || tipo.includes('destructiva')) {
-                color = '#f59e0b';
+            } else if (tipo.includes('Hueco') || tipo.includes('destructiva') || tipo.includes('Obstáculo') || tipo.includes('vía')) {
+                color = '#f97316';
+                icon = 'fa-road-barrier';
+            } else if (tipo.includes('Inseguridad') || tipo.includes('Atraco') || tipo.includes('peligrosa') || tipo.includes('Zona')) {
+                color = '#ef4444';
                 icon = 'fa-triangle-exclamation';
-            } else if (tipo.includes('Inseguridad') || tipo.includes('Atraco')) {
-                color = '#dc2626';
-                icon = 'fa-hand';
             }
 
             const marker = L.marker([coords[0], coords[1]], {

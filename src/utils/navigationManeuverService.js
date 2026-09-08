@@ -57,7 +57,7 @@ export function calculateDistanceToRoute(point, routeCoordinates = []) {
         const segDy = by - ay;
         const segLenSq = segDx * segDx + segDy * segDy;
 
-        let distMeters = 0;
+        let distMeters;
         if (segLenSq < 0.0001) {
             distMeters = Math.sqrt(ax * ax + ay * ay);
         } else {
@@ -80,6 +80,65 @@ export function calculateDistanceToRoute(point, routeCoordinates = []) {
         closestSegmentIndex,
         closestCoordIndex
     };
+}
+
+/**
+ * Projects a user coordinate [lat, lng] onto the nearest route segment
+ * if the perpendicular distance is within maxSnapMeters (default 10m).
+ * Prevents erratic map puck jumping due to mobile GPS noise.
+ */
+export function snapToSegment(userCoords, routeCoordinates = [], maxSnapMeters = 10) {
+    if (!userCoords || !routeCoordinates || routeCoordinates.length < 2) {
+        return userCoords;
+    }
+
+    const pLat = userCoords[0];
+    const pLng = userCoords[1];
+    const cosLat = Math.cos((pLat * Math.PI) / 180);
+
+    let minDistanceMeters = Infinity;
+    let bestSnappedPoint = userCoords;
+
+    for (let i = 0; i < routeCoordinates.length - 1; i++) {
+        const a = routeCoordinates[i];
+        const b = routeCoordinates[i + 1];
+
+        // Delta in local meters
+        const ax = (a[1] - pLng) * 111000 * cosLat;
+        const ay = (a[0] - pLat) * 111000;
+        const bx = (b[1] - pLng) * 111000 * cosLat;
+        const by = (b[0] - pLat) * 111000;
+
+        const segDx = bx - ax;
+        const segDy = by - ay;
+        const segLenSq = segDx * segDx + segDy * segDy;
+
+        if (segLenSq < 0.0001) continue;
+
+        // Projection factor t clamped between [0, 1]
+        const t = Math.max(0, Math.min(1, -(ax * segDx + ay * segDy) / segLenSq));
+        
+        // Orthogonal projection in lat/lng space
+        const projLat = a[0] + t * (b[0] - a[0]);
+        const projLng = a[1] + t * (b[1] - a[1]);
+
+        // Calculate distance from user coordinate to projected point
+        const projX = ax + t * segDx;
+        const projY = ay + t * segDy;
+        const dist = Math.sqrt(projX * projX + projY * projY);
+
+        if (dist < minDistanceMeters) {
+            minDistanceMeters = dist;
+            bestSnappedPoint = [projLat, projLng];
+        }
+    }
+
+    // Only snap if error is within maxSnapMeters threshold
+    if (minDistanceMeters <= maxSnapMeters) {
+        return bestSnappedPoint;
+    }
+
+    return userCoords;
 }
 
 /**

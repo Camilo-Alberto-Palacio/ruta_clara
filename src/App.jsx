@@ -26,7 +26,8 @@ import {
     calculateBearing, 
     calculateDistanceMeters, 
     calculateDistanceToRoute, 
-    calculateRemainingRouteDistance 
+    calculateRemainingRouteDistance,
+    snapToSegment
 } from './utils/navigationManeuverService';
 import DestinationArrivalModal from './components/molecules/DestinationArrivalModal';
 import { fetchBogotaWeather } from './utils/weatherService';
@@ -41,6 +42,8 @@ import MobileBottomDock from './components/molecules/MobileBottomDock';
 import QuickDestinationChips from './components/molecules/QuickDestinationChips';
 import OnboardingTourModal from './components/molecules/OnboardingTourModal';
 import KeyboardShortcutsModal from './components/molecules/KeyboardShortcutsModal';
+import QuickHazardReportButton from './components/molecules/QuickHazardReportButton';
+import { loadActiveUserReports, saveUserReport, createQuickHazardFeature, syncReport } from './utils/quickReportService';
 import { emitToast } from './utils/toastService';
 import { 
     calculateRisk, 
@@ -245,8 +248,10 @@ export default function App() {
     const [darkMode, setDarkMode] = useState(false);
     const [mapStyle, setMapStyle] = useState('light'); // 'light' | 'dark' | 'terrain'
 
-    // 3b. Citizen Science and Reports State
-    const [citizenReports, setCitizenReports] = useState([]);
+    // 3b. Citizen Science and Reports State (with persistent localStorage hydration)
+    const [citizenReports, setCitizenReports] = useState(() => {
+        return loadActiveUserReports();
+    });
     const [isReporting, setIsReporting] = useState(false);
     const [reportingType, setReportingType] = useState('Luminaria Dañada / Boca de lobo');
     const [reportingCoords, setReportingCoords] = useState(null);
@@ -863,19 +868,22 @@ export default function App() {
         const handleSuccess = (position) => {
             const { latitude, longitude, heading, speed } = position.coords;
             const currentPt = [latitude, longitude];
-            setCyclistCoords(currentPt);
+            
+            // Suavizado visual GPS: snapToSegment proyecta el marcador sobre la ciclorruta si dist <= 10m
+            const snappedPt = snapToSegment(currentPt, activeRoute.coordinates, 10);
+            setCyclistCoords(snappedPt);
 
             // Update heading/bearing for vehicle puck
             if (heading !== null && heading !== undefined && !isNaN(heading) && heading >= 0) {
                 setCyclistBearing(Math.round(heading));
             } else if (lastGpsCoordRef.current) {
-                const movedDist = calculateDistanceMeters(lastGpsCoordRef.current, currentPt);
+                const movedDist = calculateDistanceMeters(lastGpsCoordRef.current, snappedPt);
                 if (movedDist >= 2.5) {
-                    const calculatedBrng = calculateBearing(lastGpsCoordRef.current, currentPt);
+                    const calculatedBrng = calculateBearing(lastGpsCoordRef.current, snappedPt);
                     setCyclistBearing(calculatedBrng);
                 }
             }
-            lastGpsCoordRef.current = currentPt;
+            lastGpsCoordRef.current = snappedPt;
 
             if (speed !== null && speed !== undefined && !isNaN(speed)) {
                 setSpeedKmh(Math.round(speed * 3.6));
@@ -917,10 +925,11 @@ export default function App() {
             setCyclistIndex(closestIdx);
             cyclistIndexRef.current = closestIdx;
 
-            // Trigger dynamic re-route if cyclist deviated from planned road corridor
-            if (distToDest > 60 && distToRoute > 45) {
+            // Filtro de umbral sostenido: No disparar recálculo a menos que el ciclista
+            // se desvíe > 25m de forma sostenida por al menos 3 lecturas GPS consecutivas
+            if (distToDest > 40 && distToRoute > 25) {
                 offRouteTicksRef.current++;
-                if (offRouteTicksRef.current >= 2 || distToRoute > 75) {
+                if (offRouteTicksRef.current >= 3) {
                     offRouteTicksRef.current = 0;
                     handleDynamicReroute(currentPt, destPt);
                     return;
@@ -1338,6 +1347,26 @@ export default function App() {
         if (selectingLocationMode === 'report') {
             setSelectingLocationMode(null);
         }
+    };
+
+    // Crowdsourcing 1-touch Quick Hazard Report handler (Prompt 3)
+    const handleQuickHazardReport = async (hazardKey) => {
+        const coords = cyclistCoords 
+            || (userLocation ? [userLocation.lat, userLocation.lng] : null)
+            || (routePoints.origin ? [routePoints.origin.lat, routePoints.origin.lng] : [4.5317, -74.1166]);
+
+        const locName = localitiesMap[localidad]?.fullName || 'Bogotá';
+        const feature = createQuickHazardFeature(hazardKey, coords, locName);
+
+        // 1. Reactive state update
+        setCitizenReports(prev => [feature, ...prev]);
+        // 2. Persist to localStorage (with 60-min automatic expiration)
+        saveUserReport(feature);
+        // 3. Forward to future cloud sync handler
+        await syncReport(feature);
+
+        showToast(`⚠️ Reporte rápido registrado: ${feature.properties.tipo_novedad}. ¡Gracias por alertar a los ciclistas!`, 'success');
+        soundService.playNotification('info');
     };
 
     const handleZoomToReport = (coords) => {
@@ -2045,6 +2074,17 @@ export default function App() {
             {/* 1. Geospatial Map in Background */}
             <div className="absolute inset-0 z-0">
                 {mapComponent}
+            </div>
+
+            {/* Quick Hazard Crowdsourcing FAB (Waze-style 1-touch reporting) */}
+            <div className={`absolute right-4 z-30 pointer-events-auto transition-all ${
+                isNavigating ? 'bottom-28 sm:bottom-32' : (isMobile ? 'bottom-24' : 'bottom-6 right-6')
+            }`}>
+                <QuickHazardReportButton
+                    onReportHazard={handleQuickHazardReport}
+                    userLocation={userLocation}
+                    isNavigating={isNavigating}
+                />
             </div>
 
             {/* ==================== MOBILE LAYOUT (h < md) ==================== */}
