@@ -485,6 +485,142 @@ export default function App() {
     const caiPointsRef = useRef(caiPoints);
     caiPointsRef.current = caiPoints;
 
+    // 11b. OSRM Routing Fetcher
+    const fetchOSRMAlternatives = async (origin, dest) => {
+        const url = `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${dest.lng},${dest.lat}?overview=full&geometries=geojson&alternatives=true`;
+        try {
+            const response = await fetch(url);
+            const data = await response.json();
+            if (data && data.code === 'Ok') {
+                return data.routes;
+            }
+        } catch (error) {
+            console.error("OSRM routing service failed:", error);
+        }
+        return [];
+    };
+
+    // 11c. Route Object Builder (Reusable for initial plot and dynamic re-routing)
+    const buildRouteObjects = useCallback((routesData, segs, simState, constZones, citReports, tfJams, tfLights) => {
+        return routesData.map((route, idx) => {
+            const leafletCoords = route.geometry.coordinates.map(pt => [pt[1], pt[0]]);
+            const riskDetails = calculateRouteAverageRisk(
+                leafletCoords, 
+                segs, 
+                simState, 
+                constZones, 
+                simState?.showConstruction,
+                citReports
+            );
+            const routeCost = calculateRouteCost(
+                leafletCoords,
+                segs,
+                simState,
+                constZones,
+                simState?.showConstruction,
+                citReports
+            );
+
+            // Detect traffic jams on this route
+            const jamsOnRoute = detectTrafficJamsOnRoute(leafletCoords, tfJams);
+            const totalDelayMinutes = jamsOnRoute.reduce((sum, j) => sum + j.delayMinutes, 0);
+            const baseDurationMin = Math.round(route.duration / 60);
+
+            // Perfil de elevación y altimetría
+            const elevationProfile = calculateRouteElevationProfile(leafletCoords);
+
+            // Asignación de perfiles multicriterio (CU-02)
+            let profileTag = '⏱️ Exprés';
+            let routeName = `Ruta ${idx + 1}`;
+            if (idx === 0) {
+                profileTag = '🛡️ Blindada';
+                routeName = 'Ruta 1 (Más Segura)';
+            } else if (idx === 1) {
+                profileTag = '⛰️ Menos Pendiente';
+                routeName = 'Ruta 2 (Fácil Pedaleo)';
+            } else {
+                profileTag = '⏱️ Exprés';
+                routeName = `Ruta ${idx + 1} (Directa)`;
+            }
+            
+            // Calcular semáforos presentes a lo largo de esta ruta
+            const lightsOnRoute = (tfLights || []).filter(light => {
+                return leafletCoords.some(pt => {
+                    const distDeg = Math.sqrt(
+                        Math.pow(pt[0] - light.coordinates[0], 2) + 
+                        Math.pow(pt[1] - light.coordinates[1], 2)
+                    );
+                    return (distDeg * 111000) <= 80;
+                });
+            });
+            const greenCount = lightsOnRoute.filter(l => l.state === 'verde').length;
+
+            return {
+                id: `route_${idx}`,
+                name: routeName,
+                profileTag,
+                elevationProfile,
+                distanceKm: (route.distance / 1000).toFixed(1),
+                durationMin: String(baseDurationMin),
+                durationWithTraffic: String(baseDurationMin + totalDelayMinutes),
+                coordinates: leafletCoords,
+                avgRiskScore: riskDetails.avgScore,
+                maxRiskLevel: riskDetails.maxLevel,
+                trafficJamsOnRoute: jamsOnRoute,
+                totalDelayMinutes: totalDelayMinutes,
+                cost: routeCost.toFixed(1),
+                trafficLightsCount: lightsOnRoute.length,
+                greenLightsCount: greenCount,
+                trafficLightsOnRoute: lightsOnRoute
+            };
+        });
+    }, []);
+
+    // 11d. Real-time Dynamic Rerouting Engine (Off-route recovery)
+    const handleDynamicReroute = useCallback(async (currentCoord, destCoord) => {
+        if (isReroutingRef.current || !destCoord) return;
+        isReroutingRef.current = true;
+
+        setHudRecommendation("🔄 Recalculando ruta hacia el destino...");
+        audioGuidance.speakRaw("Has salido de la ruta. Recalculando trayecto.", true);
+        soundService.playNotification('warning');
+        showToast("🔄 Fuera de ruta: Recalculando hacia tu destino...", "info");
+
+        try {
+            const originObj = { lat: currentCoord[0], lng: currentCoord[1] };
+            const destObj = Array.isArray(destCoord) ? { lat: destCoord[0], lng: destCoord[1] } : destCoord;
+            const routesData = await fetchOSRMAlternatives(originObj, destObj);
+
+            if (routesData && routesData.length > 0) {
+                const calculated = buildRouteObjects(
+                    routesData, 
+                    segmentsRef.current, 
+                    simulationStateRef.current, 
+                    constructionZonesRef.current, 
+                    citizenReportsRef.current, 
+                    trafficJams, 
+                    trafficLightsRef.current
+                );
+                setGeneratedRoutes(calculated);
+                setActiveRouteId('route_0');
+                cyclistIndexRef.current = 0;
+                setCyclistIndex(0);
+                minDistToDestRef.current = Infinity;
+
+                audioGuidance.speak("Ruta recalculada. Continúa hacia tu destino.", false);
+                showToast("✅ Ruta recalculada con éxito", "success");
+            } else {
+                console.warn("No se pudieron obtener alternativas de recálculo dinámico");
+            }
+        } catch (err) {
+            console.error("Error en recálculo dinámico de ruta:", err);
+        } finally {
+            setTimeout(() => {
+                isReroutingRef.current = false;
+            }, 3000);
+        }
+    }, [buildRouteObjects]);
+
     // D. Smooth Continuous Navigation Simulation loop (Ultra-optimized for mobile 60fps)
     useEffect(() => {
         if (navStatus !== 'running' || denseCoords.length < 2 || navigationMode === 'gps') return;
@@ -1278,142 +1414,6 @@ export default function App() {
         }
         return null;
     };
-
-    // 12. OSRM Routing Fetcher
-    const fetchOSRMAlternatives = async (origin, dest) => {
-        const url = `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${dest.lng},${dest.lat}?overview=full&geometries=geojson&alternatives=true`;
-        try {
-            const response = await fetch(url);
-            const data = await response.json();
-            if (data && data.code === 'Ok') {
-                return data.routes;
-            }
-        } catch (error) {
-            console.error("OSRM routing service failed:", error);
-        }
-        return [];
-    };
-
-    // 12b. Route Object Builder (Reusable for initial plot and dynamic re-routing)
-    const buildRouteObjects = useCallback((routesData, segs, simState, constZones, citReports, tfJams, tfLights) => {
-        return routesData.map((route, idx) => {
-            const leafletCoords = route.geometry.coordinates.map(pt => [pt[1], pt[0]]);
-            const riskDetails = calculateRouteAverageRisk(
-                leafletCoords, 
-                segs, 
-                simState, 
-                constZones, 
-                simState?.showConstruction,
-                citReports
-            );
-            const routeCost = calculateRouteCost(
-                leafletCoords,
-                segs,
-                simState,
-                constZones,
-                simState?.showConstruction,
-                citReports
-            );
-
-            // Detect traffic jams on this route
-            const jamsOnRoute = detectTrafficJamsOnRoute(leafletCoords, tfJams);
-            const totalDelayMinutes = jamsOnRoute.reduce((sum, j) => sum + j.delayMinutes, 0);
-            const baseDurationMin = Math.round(route.duration / 60);
-
-            // Perfil de elevación y altimetría
-            const elevationProfile = calculateRouteElevationProfile(leafletCoords);
-
-            // Asignación de perfiles multicriterio (CU-02)
-            let profileTag = '⏱️ Exprés';
-            let routeName = `Ruta ${idx + 1}`;
-            if (idx === 0) {
-                profileTag = '🛡️ Blindada';
-                routeName = 'Ruta 1 (Más Segura)';
-            } else if (idx === 1) {
-                profileTag = '⛰️ Menos Pendiente';
-                routeName = 'Ruta 2 (Fácil Pedaleo)';
-            } else {
-                profileTag = '⏱️ Exprés';
-                routeName = `Ruta ${idx + 1} (Directa)`;
-            }
-            
-            // Calcular semáforos presentes a lo largo de esta ruta
-            const lightsOnRoute = (tfLights || []).filter(light => {
-                return leafletCoords.some(pt => {
-                    const distDeg = Math.sqrt(
-                        Math.pow(pt[0] - light.coordinates[0], 2) + 
-                        Math.pow(pt[1] - light.coordinates[1], 2)
-                    );
-                    return (distDeg * 111000) <= 80;
-                });
-            });
-            const greenCount = lightsOnRoute.filter(l => l.state === 'verde').length;
-
-            return {
-                id: `route_${idx}`,
-                name: routeName,
-                profileTag,
-                elevationProfile,
-                distanceKm: (route.distance / 1000).toFixed(1),
-                durationMin: String(baseDurationMin),
-                durationWithTraffic: String(baseDurationMin + totalDelayMinutes),
-                coordinates: leafletCoords,
-                avgRiskScore: riskDetails.avgScore,
-                maxRiskLevel: riskDetails.maxLevel,
-                trafficJamsOnRoute: jamsOnRoute,
-                totalDelayMinutes: totalDelayMinutes,
-                cost: routeCost.toFixed(1),
-                trafficLightsCount: lightsOnRoute.length,
-                greenLightsCount: greenCount,
-                trafficLightsOnRoute: lightsOnRoute
-            };
-        });
-    }, []);
-
-    // 12c. Real-time Dynamic Rerouting Engine (Off-route recovery)
-    const handleDynamicReroute = useCallback(async (currentCoord, destCoord) => {
-        if (isReroutingRef.current || !destCoord) return;
-        isReroutingRef.current = true;
-
-        setHudRecommendation("🔄 Recalculando ruta hacia el destino...");
-        audioGuidance.speakRaw("Has salido de la ruta. Recalculando trayecto.", true);
-        soundService.playNotification('warning');
-        showToast("🔄 Fuera de ruta: Recalculando hacia tu destino...", "info");
-
-        try {
-            const originObj = { lat: currentCoord[0], lng: currentCoord[1] };
-            const destObj = Array.isArray(destCoord) ? { lat: destCoord[0], lng: destCoord[1] } : destCoord;
-            const routesData = await fetchOSRMAlternatives(originObj, destObj);
-
-            if (routesData && routesData.length > 0) {
-                const calculated = buildRouteObjects(
-                    routesData, 
-                    segmentsRef.current, 
-                    simulationStateRef.current, 
-                    constructionZonesRef.current, 
-                    citizenReportsRef.current, 
-                    trafficJams, 
-                    trafficLightsRef.current
-                );
-                setGeneratedRoutes(calculated);
-                setActiveRouteId('route_0');
-                cyclistIndexRef.current = 0;
-                setCyclistIndex(0);
-                minDistToDestRef.current = Infinity;
-
-                audioGuidance.speak("Ruta recalculada. Continúa hacia tu destino.", false);
-                showToast("✅ Ruta recalculada con éxito", "success");
-            } else {
-                console.warn("No se pudieron obtener alternativas de recálculo dinámico");
-            }
-        } catch (err) {
-            console.error("Error en recálculo dinámico de ruta:", err);
-        } finally {
-            setTimeout(() => {
-                isReroutingRef.current = false;
-            }, 3000);
-        }
-    }, [buildRouteObjects]);
 
     // 13. Trigger route plotting calculations (supports optional overrides for instant 1-touch chips)
     const handleCalculateRoute = async (overrideOrigin = null, overrideDest = null, overrideDestName = null) => {
