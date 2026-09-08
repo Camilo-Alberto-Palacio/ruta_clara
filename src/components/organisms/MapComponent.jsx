@@ -81,6 +81,7 @@ function getLocalityKey(locNombre) {
 export default function MapComponent({
     mapStyle = 'light',
     navigationMode = 'simulated',
+    navSpeedMultiplier = 1,
     localidad,
     onLocalidadChange,
     selectedSegmentId,
@@ -133,6 +134,7 @@ export default function MapComponent({
     const caravanLayersRef = useRef([]);
     const trafficLightLayersRef = useRef([]);
     const cyclistMarkerRef = useRef(null);
+    const continuousBearingRef = useRef(null);
     const tileLayerRef = useRef(null);
 
     // Keep refs of callbacks to avoid re-triggering effects
@@ -1376,6 +1378,7 @@ export default function MapComponent({
         map.keyboard.enable();
 
         if (!isNavigating || !cyclistCoords) {
+            continuousBearingRef.current = null;
             // Remove cyclist marker when not navigating
             if (cyclistMarkerRef.current) {
                 map.removeLayer(cyclistMarkerRef.current);
@@ -1384,17 +1387,38 @@ export default function MapComponent({
             return;
         }
 
-        // If marker already exists, smoothly update position and rotate arrow to point along tangent
+        // Calculate continuous bearing (shortest angular delta) to prevent 360° flip spins
+        const targetBearing = (cyclistBearing !== null && cyclistBearing !== undefined && !isNaN(cyclistBearing)) 
+            ? cyclistBearing 
+            : 0;
+
+        if (continuousBearingRef.current === null || isNaN(continuousBearingRef.current)) {
+            continuousBearingRef.current = targetBearing;
+        }
+
+        const currentAngle = continuousBearingRef.current;
+        const diff = ((targetBearing - (currentAngle % 360) + 540) % 360) - 180;
+        const newAngle = currentAngle + diff;
+        continuousBearingRef.current = newAngle;
+
+        // Dynamic transition duration: rapid linear at 5x to avoid interrupted CSS transitions
+        const arrowTransition = navSpeedMultiplier >= 5 
+            ? 'transform 0.05s linear' 
+            : (navSpeedMultiplier === 2 ? 'transform 0.08s ease-out' : 'transform 0.12s ease-out');
+
+        // If marker already exists, smoothly update position and rotate arrow along shortest arc
         if (cyclistMarkerRef.current) {
             cyclistMarkerRef.current.setLatLng(cyclistCoords);
             const el = cyclistMarkerRef.current.getElement();
             if (el) {
                 const arrowEl = el.querySelector('.waze-arrow-icon');
                 if (arrowEl) {
-                    arrowEl.style.transform = `rotate(${cyclistBearing}deg)`;
+                    arrowEl.style.transition = arrowTransition;
+                    arrowEl.style.transform = `rotate(${newAngle}deg)`;
                 }
             }
         } else {
+            continuousBearingRef.current = targetBearing;
             // Emerald Green Navigation Cursor (Ruta Clara Palette)
             const cyclistIcon = L.divIcon({
                 className: 'waze-vehicle-puck-wrapper',
@@ -1433,8 +1457,9 @@ export default function MapComponent({
                                 display: flex;
                                 align-items: center;
                                 justify-content: center;
-                                transform: rotate(${cyclistBearing}deg);
-                                transition: transform 0.15s ease-out;
+                                transform: rotate(${newAngle}deg);
+                                transition: ${arrowTransition};
+                                will-change: transform;
                             ">
                                 <svg viewBox="0 0 24 24" width="22" height="22" style="fill: #ffffff; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5)); transform: translateY(-1px);">
                                     <path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z"/>
@@ -1460,17 +1485,26 @@ export default function MapComponent({
 
         // Camera follow ONLY if user has NOT panned away
         if (isCameraLocked) {
-            if (map.getZoom() < 16) {
+            const currentCenter = map.getCenter();
+            const distMeters = currentCenter ? currentCenter.distanceTo(cyclistCoords) : 0;
+
+            if (map.getZoom() < 16 || distMeters > 90) {
+                // Immediate lock-in if zoomed out or recently recentered from afar
                 map.setView(cyclistCoords, 17);
+            } else if (navSpeedMultiplier >= 5) {
+                // At 5x high speed, lock camera synchronously to marker frame
+                // This eliminates Leaflet animation cancel latency and stops all camera/marker jitter
+                map.panTo(cyclistCoords, { animate: false });
             } else {
+                const panDuration = navSpeedMultiplier === 2 ? 0.06 : 0.12;
                 map.panTo(cyclistCoords, { 
                     animate: true,
-                    duration: 0.25,
-                    easeLinearity: 0.25
+                    duration: panDuration,
+                    easeLinearity: 0.5
                 });
             }
         }
-    }, [isNavigating, cyclistCoords, cyclistBearing, isCameraLocked]);
+    }, [isNavigating, cyclistCoords, cyclistBearing, isCameraLocked, navSpeedMultiplier]);
 
     // 9. Zoom to specific coordinates when requested (e.g. from citizen reports panel)
     useEffect(() => {

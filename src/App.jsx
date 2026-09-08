@@ -631,6 +631,8 @@ export default function App() {
         if (navStatus !== 'running' || denseCoords.length < 2 || navigationMode === 'gps') return;
 
         let waitTicks = 0;
+        const step = navSpeedMultiplier >= 5 ? 2 : 1;
+        const tickInterval = navSpeedMultiplier >= 5 ? 60 : (150 / navSpeedMultiplier);
 
         const interval = setInterval(() => {
             const currIdx = cyclistIndexRef.current;
@@ -685,14 +687,15 @@ export default function App() {
 
             waitTicks = 0;
 
-            const nextIdx = currIdx + 1;
+            const nextIdx = Math.min(currIdx + step, denseCoords.length - 1);
             cyclistIndexRef.current = nextIdx;
             setCyclistIndex(nextIdx);
             setCyclistCoords(denseCoords[nextIdx]);
 
-            // Calculate precise travel heading along immediate road segment
+            // Calculate precise travel heading along immediate road segment with adaptive lookahead
+            const lookAhead = Math.min(Math.max(4, navSpeedMultiplier * 2), 8);
             const p1 = denseCoords[nextIdx];
-            const p2 = denseCoords[Math.min(nextIdx + 2, denseCoords.length - 1)];
+            const p2 = denseCoords[Math.min(nextIdx + lookAhead, denseCoords.length - 1)];
             if (p1 && p2 && (p1[0] !== p2[0] || p1[1] !== p2[1])) {
                 const lat1 = p1[0] * Math.PI / 180;
                 const lon1 = p1[1] * Math.PI / 180;
@@ -731,8 +734,8 @@ export default function App() {
                 }
             }
 
-            // Dynamic recommendations & Voice Copilot periodically (every 8 steps = ~50m)
-            if (nextIdx % 8 === 0) {
+            // Dynamic recommendations & Voice Copilot periodically (every ~50m)
+            if (Math.floor(nextIdx / 8) > Math.floor(currIdx / 8)) {
                 const currentCoord = denseCoords[nextIdx];
                 const riskInfo = evaluateCoordinateRisk(
                     currentCoord[0], 
@@ -847,7 +850,7 @@ export default function App() {
                     setHudRecommendation('🚴 Ruta despejada. Disfruta tu recorrido.');
                 }
             }
-        }, 150 / navSpeedMultiplier);
+        }, tickInterval);
 
         return () => clearInterval(interval);
     }, [navStatus, navigationMode, navSpeedMultiplier, denseCoords]);
@@ -1750,6 +1753,7 @@ export default function App() {
             trafficLights={trafficLights}
             isNavigating={isNavigating}
             navigationMode={navigationMode}
+            navSpeedMultiplier={navSpeedMultiplier}
             isCameraLocked={isCameraLocked}
             onCameraLockChange={setIsCameraLocked}
             cyclistCoords={cyclistCoords}
