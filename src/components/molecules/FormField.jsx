@@ -66,7 +66,8 @@ export default function FormField({
     title = '',
     onSelectLocation,
     showGpsButton = false,
-    userLocation = null
+    userLocation = null,
+    onStartVoice = null
 }) {
     const [suggestions, setSuggestions] = useState([]);
     const [showDropdown, setShowDropdown] = useState(false);
@@ -359,6 +360,15 @@ export default function FormField({
                     disabled={gpsLoading}
                 >
                     <i className={`fa-solid ${gpsLoading ? 'fa-spinner fa-spin' : 'fa-location-arrow'}`}></i>
+                </Button>
+            )}
+            {onStartVoice && (
+                <Button
+                    variant="icon-select"
+                    onClick={onStartVoice}
+                    title="Dictar por voz"
+                >
+                    <i className="fa-solid fa-microphone text-emerald-600"></i>
                 </Button>
             )}
             {onSelectOnMap && (

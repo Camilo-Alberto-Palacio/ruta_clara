@@ -46,6 +46,7 @@ import KeyboardShortcutsModal from './components/molecules/KeyboardShortcutsModa
 import QuickHazardReportButton from './components/molecules/QuickHazardReportButton';
 import PotholeReportModal from './components/molecules/PotholeReportModal';
 import MapSettingsModal from './components/molecules/MapSettingsModal';
+import VoiceSearchModal from './components/molecules/VoiceSearchModal';
 import { loadActiveUserReports, saveUserReport, createQuickHazardFeature, syncReport } from './utils/quickReportService';
 import { emitToast } from './utils/toastService';
 import { 
@@ -261,6 +262,7 @@ export default function App() {
     });
     const [isReporting, setIsReporting] = useState(false);
     const [isPotholeModalOpen, setIsPotholeModalOpen] = useState(false);
+    const [isVoiceSearchOpen, setIsVoiceSearchOpen] = useState(false);
     const [reportingType, setReportingType] = useState('Luminaria Dañada / Boca de lobo');
     const [reportingCoords, setReportingCoords] = useState(null);
     const [isSelectingCoords, setIsSelectingCoords] = useState(false);
@@ -1915,6 +1917,7 @@ export default function App() {
             onDepartureHourChange={handleDepartureHourChange}
             weatherData={weatherData}
             userLocation={userLocation}
+            onStartVoice={() => setIsVoiceSearchOpen(true)}
         />
     );
 
@@ -2277,6 +2280,14 @@ export default function App() {
                         <i className="fa-solid fa-magnifying-glass text-emerald-600 text-base"></i>
                         <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>¿A dónde quieres ir hoy? (Planificar ruta)</span>
                     </div>
+                    {/* Botón de Dictado por Voz en Pantalla Principal */}
+                    <button
+                        onClick={() => setIsVoiceSearchOpen(true)}
+                        className="w-12 h-12 rounded-2xl bg-white hover:bg-emerald-50 text-emerald-600 flex items-center justify-center shadow-lg cursor-pointer border border-emerald-100 flex-shrink-0 active:scale-95 transition-all"
+                        title="Dictar destino por voz"
+                    >
+                        <i className="fa-solid fa-microphone text-base"></i>
+                    </button>
                     <button
                         onClick={() => setIsSafeHavenOpen(true)}
                         className="w-12 h-12 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center shadow-lg cursor-pointer border-none flex-shrink-0 animate-pulse"
@@ -2367,6 +2378,10 @@ export default function App() {
                             onSelectLocation={handleSelectDestLocation}
                             showGpsButton={false}
                             userLocation={userLocation}
+                            onStartVoice={() => {
+                                setIsMobileSearchOpen(false);
+                                setIsVoiceSearchOpen(true);
+                            }}
                         />
 
                         {/* Mobile Departure Hour & Weather */}
@@ -2606,6 +2621,7 @@ export default function App() {
                     activeRouteCount={0}
                     onEmergencySOS={() => setIsSafeHavenOpen(true)}
                     onOpenLayers={() => setMobileLayersOpen(prev => !prev)}
+                    onVoiceSearch={() => setIsVoiceSearchOpen(true)}
                 />
             )}
 
@@ -2991,6 +3007,22 @@ export default function App() {
                 onStartNewRoute={() => {
                     setIsArrivalModalOpen(false);
                     handleClearRoute();
+                }}
+            />
+
+            {/* Modal de Dictado por Voz en Pantalla Principal */}
+            <VoiceSearchModal
+                isOpen={isVoiceSearchOpen}
+                onClose={() => setIsVoiceSearchOpen(false)}
+                onDestinationRecognized={(recognizedText) => {
+                    setIsVoiceSearchOpen(false);
+                    setDestInput(recognizedText);
+                    if (!isMobile) {
+                        setLeftDrawerOpen(true);
+                        setActiveTab('routes');
+                    }
+                    audioGuidance.speakRaw(`Buscando ruta hacia ${recognizedText}.`);
+                    handleCalculateRoute(null, null, recognizedText);
                 }}
             />
 

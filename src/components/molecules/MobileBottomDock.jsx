@@ -7,6 +7,7 @@ export default function MobileBottomDock({
     activeRouteCount = 0,
     onEmergencySOS,
     onOpenLayers,
+    onVoiceSearch,
     isZenMode = false
 }) {
     return (
@@ -21,19 +22,32 @@ export default function MobileBottomDock({
             <button
                 type="button"
                 onClick={hasRoutes ? onToggleResults : onOpenSearch}
-                className="flex flex-col items-center justify-center py-2 px-3 rounded-2xl text-slate-700 hover:text-emerald-700 hover:bg-emerald-50 transition-all border-none bg-transparent cursor-pointer flex-1 relative"
+                className="flex flex-col items-center justify-center py-2 px-2.5 rounded-2xl text-slate-700 hover:text-emerald-700 hover:bg-emerald-50 transition-all border-none bg-transparent cursor-pointer flex-1 relative"
                 title={hasRoutes ? "Ver alternativas de ruta" : "Planificar ruta"}
             >
                 <i className={`fa-solid ${hasRoutes ? 'fa-route' : 'fa-magnifying-glass'} text-lg text-emerald-600`}></i>
-                <span className="text-[11px] font-extrabold mt-1 text-slate-800">
+                <span className="text-[10px] font-extrabold mt-1 text-slate-800">
                     {hasRoutes ? 'Rutas' : 'Buscar'}
                 </span>
                 {hasRoutes && (
-                    <span className="absolute top-1 right-3 w-4 h-4 rounded-full bg-emerald-600 text-white text-[9px] font-black flex items-center justify-center shadow-xs">
+                    <span className="absolute top-1 right-2 w-4 h-4 rounded-full bg-emerald-600 text-white text-[9px] font-black flex items-center justify-center shadow-xs">
                         {activeRouteCount || 3}
                     </span>
                 )}
             </button>
+
+            {/* 2. Dictar por Voz */}
+            {onVoiceSearch && (
+                <button
+                    type="button"
+                    onClick={onVoiceSearch}
+                    className="flex flex-col items-center justify-center py-2 px-2.5 rounded-2xl text-slate-700 hover:text-emerald-700 hover:bg-emerald-50 transition-all border-none bg-transparent cursor-pointer flex-1"
+                    title="Dictar destino por voz"
+                >
+                    <i className="fa-solid fa-microphone text-lg text-emerald-600"></i>
+                    <span className="text-[10px] font-extrabold mt-1 text-slate-800">Voz</span>
+                </button>
+            )}
 
             {/* 2. Botón Central Hero SOS CAI (Emergencia) */}
             <button

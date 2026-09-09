@@ -29,7 +29,8 @@ export default function RoutePlanner({
     departureHour = null,
     onDepartureHourChange,
     weatherData = null,
-    userLocation = null
+    userLocation = null,
+    onStartVoice = null
 }) {
     const handleToggle = (key, val) => {
         if (onMapLayersChange) {
@@ -103,6 +104,7 @@ export default function RoutePlanner({
                 onSelectLocation={onSelectDestLocation}
                 showGpsButton={false}
                 userLocation={userLocation}
+                onStartVoice={onStartVoice}
             />
 
             {/* Quick Destination Chips (Heurística 6) */}
