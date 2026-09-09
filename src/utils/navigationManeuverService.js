@@ -87,7 +87,7 @@ export function calculateDistanceToRoute(point, routeCoordinates = []) {
  * if the perpendicular distance is within maxSnapMeters (default 10m).
  * Prevents erratic map puck jumping due to mobile GPS noise.
  */
-export function snapToSegment(userCoords, routeCoordinates = [], maxSnapMeters = 10) {
+export function snapToSegment(userCoords, routeCoordinates = [], maxSnapMeters = 22) {
     if (!userCoords || !routeCoordinates || routeCoordinates.length < 2) {
         return userCoords;
     }
@@ -139,6 +139,26 @@ export function snapToSegment(userCoords, routeCoordinates = [], maxSnapMeters =
     }
 
     return userCoords;
+}
+
+/**
+ * Filters out impossible leaps (GPS multipath reflections) and applies exponential smoothing
+ */
+export function smoothGpsCoordinate(lastCoord, newCoord, dtSeconds, maxAllowedSpeedKmh = 50) {
+    if (!lastCoord || !newCoord) return newCoord;
+    if (!dtSeconds || dtSeconds <= 0 || dtSeconds > 10) return newCoord;
+
+    const dist = calculateDistanceMeters(lastCoord, newCoord);
+    const speedKmh = (dist / dtSeconds) * 3.6;
+
+    if (speedKmh > maxAllowedSpeedKmh) {
+        // High speed jump / GPS glitch detected. Smooth to prevent sudden camera or route jumps
+        return [
+            lastCoord[0] + 0.35 * (newCoord[0] - lastCoord[0]),
+            lastCoord[1] + 0.35 * (newCoord[1] - lastCoord[1])
+        ];
+    }
+    return newCoord;
 }
 
 /**

@@ -28,7 +28,8 @@ export default function RoutePlanner({
     onViewModeChange,
     departureHour = null,
     onDepartureHourChange,
-    weatherData = null
+    weatherData = null,
+    userLocation = null
 }) {
     const handleToggle = (key, val) => {
         if (onMapLayersChange) {
@@ -88,6 +89,7 @@ export default function RoutePlanner({
                 title="Fijar origen en el mapa"
                 onSelectLocation={onSelectOriginLocation}
                 showGpsButton={true}
+                userLocation={userLocation}
             />
             
             <FormField
@@ -100,6 +102,7 @@ export default function RoutePlanner({
                 title="Fijar destino en el mapa"
                 onSelectLocation={onSelectDestLocation}
                 showGpsButton={false}
+                userLocation={userLocation}
             />
 
             {/* Quick Destination Chips (Heurística 6) */}

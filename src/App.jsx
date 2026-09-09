@@ -27,7 +27,8 @@ import {
     calculateDistanceMeters, 
     calculateDistanceToRoute, 
     calculateRemainingRouteDistance,
-    snapToSegment
+    snapToSegment,
+    smoothGpsCoordinate
 } from './utils/navigationManeuverService';
 import DestinationArrivalModal from './components/molecules/DestinationArrivalModal';
 import { fetchBogotaWeather } from './utils/weatherService';
@@ -236,9 +237,13 @@ export default function App() {
     const lastRiskLevelRef = useRef('Bajo');
     const [isArrivalModalOpen, setIsArrivalModalOpen] = useState(false);
     const offRouteTicksRef = useRef(0);
+    const offRouteStartTimeRef = useRef(null);
+    const lastRerouteTimeRef = useRef(0);
     const isReroutingRef = useRef(false);
     const minDistToDestRef = useRef(Infinity);
     const lastGpsCoordRef = useRef(null);
+    const lastRawGpsCoordRef = useRef(null);
+    const lastGpsTimeRef = useRef(null);
 
     // Mobile popover states and bottom sheet active tab
     const [mobileLayersOpen, setMobileLayersOpen] = useState(false);
@@ -592,8 +597,12 @@ export default function App() {
         showToast("🔄 Fuera de ruta: Recalculando hacia tu destino...", "info");
 
         try {
-            const originObj = { lat: currentCoord[0], lng: currentCoord[1] };
-            const destObj = Array.isArray(destCoord) ? { lat: destCoord[0], lng: destCoord[1] } : destCoord;
+            const originObj = Array.isArray(currentCoord) 
+                ? { lat: currentCoord[0], lng: currentCoord[1] } 
+                : currentCoord;
+            const destObj = Array.isArray(destCoord) 
+                ? { lat: destCoord[0], lng: destCoord[1] } 
+                : destCoord;
             const routesData = await fetchOSRMAlternatives(originObj, destObj);
 
             if (routesData && routesData.length > 0) {
@@ -607,7 +616,8 @@ export default function App() {
                     trafficLightsRef.current
                 );
                 setGeneratedRoutes(calculated);
-                setActiveRouteId('route_0');
+                const nextRouteId = calculated[0]?.id || 'route_0';
+                setActiveRouteId(nextRouteId);
                 cyclistIndexRef.current = 0;
                 setCyclistIndex(0);
                 minDistToDestRef.current = Infinity;
@@ -616,15 +626,17 @@ export default function App() {
                 showToast("✅ Ruta recalculada con éxito", "success");
             } else {
                 console.warn("No se pudieron obtener alternativas de recálculo dinámico");
+                showToast("⚠️ No se pudo recalcular automáticamente. Mantén la marcha.", "warning");
             }
         } catch (err) {
             console.error("Error en recálculo dinámico de ruta:", err);
+            showToast("Error de conexión al recalcular. Manteniendo ruta actual.", "error");
         } finally {
             setTimeout(() => {
                 isReroutingRef.current = false;
-            }, 3000);
+            }, 4000);
         }
-    }, [buildRouteObjects]);
+    }, [buildRouteObjects, trafficJams]);
 
     // D. Smooth Continuous Navigation Simulation loop (Ultra-optimized for mobile 60fps)
     useEffect(() => {
@@ -869,19 +881,33 @@ export default function App() {
         if (!activeRoute) return;
 
         const handleSuccess = (position) => {
-            const { latitude, longitude, heading, speed } = position.coords;
-            const currentPt = [latitude, longitude];
-            
-            // Suavizado visual GPS: snapToSegment proyecta el marcador sobre la ciclorruta si dist <= 10m
-            const snappedPt = snapToSegment(currentPt, activeRoute.coordinates, 10);
+            const { latitude, longitude, accuracy, heading, speed } = position.coords;
+
+            // 1. Accuracy Filter (Noise Gate): Descartar lecturas con error > 35m
+            if (accuracy && accuracy > 35) {
+                console.warn(`[GPS] Lectura descartada por baja precisión: ±${Math.round(accuracy)}m`);
+                return;
+            }
+
+            const rawPt = [latitude, longitude];
+            const now = Date.now();
+            const dtSeconds = lastGpsTimeRef.current ? (now - lastGpsTimeRef.current) / 1000 : 1;
+
+            // 2. Filtro de saltos físicos / teletransporte (> 50 km/h)
+            const smoothedPt = smoothGpsCoordinate(lastRawGpsCoordRef.current, rawPt, dtSeconds, 50);
+            lastRawGpsCoordRef.current = smoothedPt;
+            lastGpsTimeRef.current = now;
+
+            // 3. Suavizado visual GPS: snapToSegment proyecta el marcador sobre la ciclorruta si dist <= 22m
+            const snappedPt = snapToSegment(smoothedPt, activeRoute.coordinates, 22);
             setCyclistCoords(snappedPt);
 
-            // Update heading/bearing for vehicle puck
-            if (heading !== null && heading !== undefined && !isNaN(heading) && heading >= 0) {
+            // 4. Update heading/bearing for vehicle puck (evitar giros erráticos detenido)
+            if (heading !== null && heading !== undefined && !isNaN(heading) && heading >= 0 && (speed !== null && speed > 0.8)) {
                 setCyclistBearing(Math.round(heading));
             } else if (lastGpsCoordRef.current) {
                 const movedDist = calculateDistanceMeters(lastGpsCoordRef.current, snappedPt);
-                if (movedDist >= 2.5) {
+                if (movedDist >= 3.5) {
                     const calculatedBrng = calculateBearing(lastGpsCoordRef.current, snappedPt);
                     setCyclistBearing(calculatedBrng);
                 }
@@ -895,14 +921,14 @@ export default function App() {
             }
 
             const destPt = activeRoute.coordinates[activeRoute.coordinates.length - 1];
-            const distToDest = calculateDistanceMeters(currentPt, destPt);
+            const distToDest = calculateDistanceMeters(smoothedPt, destPt);
 
             // Update minimum recorded distance to destination
             if (distToDest < minDistToDestRef.current) {
                 minDistToDestRef.current = distToDest;
             }
 
-            // --- 1. ARRIVAL DETECTION ---
+            // --- 5. ARRIVAL DETECTION ---
             // If within 40m, or passed destination (reached <= 45m and now distance starts increasing)
             const hasReachedDest = distToDest <= 40;
             const hasPassedDest = minDistToDestRef.current <= 45 && (distToDest >= minDistToDestRef.current + 8) && distToDest <= 70;
@@ -920,25 +946,36 @@ export default function App() {
                 return;
             }
 
-            // --- 2. OFF-ROUTE & PROGRESS EVALUATION ---
-            const routeDistInfo = calculateDistanceToRoute(currentPt, activeRoute.coordinates);
+            // --- 6. OFF-ROUTE & PROGRESS EVALUATION ---
+            const routeDistInfo = calculateDistanceToRoute(smoothedPt, activeRoute.coordinates);
             const distToRoute = routeDistInfo.minDistanceMeters;
             const closestIdx = routeDistInfo.closestCoordIndex;
 
             setCyclistIndex(closestIdx);
             cyclistIndexRef.current = closestIdx;
 
-            // Filtro de umbral sostenido: No disparar recálculo a menos que el ciclista
-            // se desvíe > 25m de forma sostenida por al menos 3 lecturas GPS consecutivas
-            if (distToDest > 40 && distToRoute > 25) {
-                offRouteTicksRef.current++;
-                if (offRouteTicksRef.current >= 3) {
-                    offRouteTicksRef.current = 0;
-                    handleDynamicReroute(currentPt, destPt);
+            // Filtro robusto anti-jitter para recálculo dinámico:
+            // - Distancia a la ruta > 35m (no 25m)
+            // - Precisión de GPS aceptable (accuracy <= 25m) para asegurar que el ciclista realmente cambió de vía
+            // - Sostenido de forma continua durante al menos 5 segundos reales
+            // - Cooldown de 12 segundos tras un recálculo
+            const isFarFromRoute = distToDest > 40 && distToRoute > 35;
+            const hasGoodAccuracy = !accuracy || accuracy <= 25;
+            const timeSinceLastReroute = now - lastRerouteTimeRef.current;
+
+            if (isFarFromRoute && hasGoodAccuracy) {
+                if (!offRouteStartTimeRef.current) {
+                    offRouteStartTimeRef.current = now;
+                }
+                const offRouteDuration = now - offRouteStartTimeRef.current;
+                if (offRouteDuration >= 5000 && timeSinceLastReroute >= 12000) {
+                    offRouteStartTimeRef.current = null;
+                    lastRerouteTimeRef.current = now;
+                    handleDynamicReroute(smoothedPt, destPt);
                     return;
                 }
             } else {
-                offRouteTicksRef.current = 0;
+                offRouteStartTimeRef.current = null;
             }
 
             // --- 3. TURN-BY-TURN VOICE GUIDANCE IN GPS MODE ---
@@ -1428,18 +1465,52 @@ export default function App() {
         }
     }, [citizenReports, simulationState]);
 
-    // 11. Nominatim Geocoding Fetcher
-    const geocodeAddress = async (addressText) => {
-        const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(addressText)},+Bogota,+Colombia&format=json&limit=1`;
+    // 11. Nominatim Geocoding Fetcher con desambiguación inteligente y proximidad
+    const geocodeAddress = async (addressText, proximityCoord = null) => {
+        const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(addressText)},+Bogota,+Colombia&format=json&addressdetails=1&limit=8&countrycodes=co&viewbox=-74.28,4.42,-74.00,4.82`;
         try {
-            const response = await fetch(url);
+            const response = await fetch(url, { headers: { 'Accept-Language': 'es' } });
             const data = await response.json();
             if (data && data.length > 0) {
-                return {
-                    lat: parseFloat(data[0].lat),
-                    lng: parseFloat(data[0].lon),
-                    name: data[0].display_name.split(',')[0]
-                };
+                const parsed = data.map(item => {
+                    const addr = item.address || {};
+                    const rawTitle = item.display_name.split(',')[0].trim();
+                    const branchOrSub = addr.suburb || addr.neighbourhood || addr.city_district || addr.quarter;
+                    const road = addr.road;
+                    let enrichedName = rawTitle;
+
+                    if (rawTitle.toLowerCase().includes('alkosto') || rawTitle.toLowerCase().includes('éxito') || rawTitle.toLowerCase().includes('exito') || rawTitle.toLowerCase().includes('d1')) {
+                        if (branchOrSub && !rawTitle.toLowerCase().includes(branchOrSub.toLowerCase())) {
+                            enrichedName = `${rawTitle} - ${branchOrSub}`;
+                        } else if (road && !rawTitle.toLowerCase().includes(road.toLowerCase())) {
+                            enrichedName = `${rawTitle} (${road})`;
+                        }
+                    }
+
+                    const lat = parseFloat(item.lat);
+                    const lng = parseFloat(item.lon);
+                    let distanceMeters = Infinity;
+
+                    if (proximityCoord) {
+                        const pLat = proximityCoord.lat !== undefined ? proximityCoord.lat : proximityCoord[0];
+                        const pLng = proximityCoord.lng !== undefined ? proximityCoord.lng : proximityCoord[1];
+                        distanceMeters = calculateDistanceMeters([pLat, pLng], [lat, lng]);
+                    }
+
+                    return {
+                        lat,
+                        lng,
+                        name: enrichedName,
+                        fullName: item.display_name,
+                        distanceMeters
+                    };
+                });
+
+                if (proximityCoord) {
+                    parsed.sort((a, b) => a.distanceMeters - b.distanceMeters);
+                }
+
+                return parsed[0];
             }
         } catch (error) {
             console.error("Geocoding failed:", error);
@@ -1472,7 +1543,7 @@ export default function App() {
                     const activeLoc = localitiesMap[localidad];
                     originCoord = activeLoc ? { lat: activeLoc.center[0], lng: activeLoc.center[1] } : { lat: 4.5317, lng: -74.1166 };
                 } else {
-                    const result = await geocodeAddress(origText);
+                    const result = await geocodeAddress(origText, userLocation);
                     if (result) {
                         originCoord = { lat: result.lat, lng: result.lng };
                         setOriginInput(result.name);
@@ -1491,10 +1562,14 @@ export default function App() {
             if (destMatch) {
                 destCoord = { lat: parseFloat(destMatch[1]), lng: parseFloat(destMatch[2]) };
             } else {
-                const result = await geocodeAddress(destText);
+                const result = await geocodeAddress(destText, originCoord || userLocation);
                 if (result) {
                     destCoord = { lat: result.lat, lng: result.lng };
                     setDestInput(result.name);
+                    if (result.distanceMeters && result.distanceMeters < 50000) {
+                        const distKm = (result.distanceMeters / 1000).toFixed(1);
+                        showToast(`📍 Destino fijado: ${result.name} (a ${distKm} km)`, "info");
+                    }
                 } else {
                     showToast(`No se pudo encontrar la ubicación de destino: "${destText}"`, "error");
                     setIsLoading(false);
@@ -1799,6 +1874,7 @@ export default function App() {
             departureHour={departureHour}
             onDepartureHourChange={handleDepartureHourChange}
             weatherData={weatherData}
+            userLocation={userLocation}
         />
     );
 
@@ -1880,6 +1956,24 @@ export default function App() {
     const activeManeuverDist = currentManeuverInfo ? currentManeuverInfo.distanceMeters : remainingMetersToDest;
     const maneuverIcon = activeManeuver?.icon || (remainingMetersToDest <= 40 ? 'fa-flag-checkered' : 'fa-arrow-up');
     const displayDist = remainingMetersToDest <= 40 ? '0 m' : (activeManeuverDist >= 1000 ? `${(activeManeuverDist / 1000).toFixed(1)} km` : `${activeManeuverDist} m`);
+
+    // Salida limpia e inmediata de la navegación activa para evitar cuelgues o reinicios de la app
+    const handleExitNavigation = useCallback(() => {
+        setNavStatus('stopped');
+        setIsNavigating(false);
+        setIsCameraLocked(true);
+        cyclistIndexRef.current = 0;
+        setCyclistCoords(null);
+        setCyclistIndex(0);
+        setSpeedKmh(0);
+        setNextTrafficLight(null);
+        audioGuidance.stop();
+        wakeLockService.releaseWakeLock();
+        if (isMobile) {
+            setIsBottomSheetExpanded(true);
+        }
+        showToast("Navegación finalizada. Regresando al planificador.", "info");
+    }, [isMobile]);
 
     const cockpitHUD = isNavigating && activeRoute && (
         <div className="fixed inset-0 pointer-events-none z-50 flex flex-col justify-between p-4 animate-fade-in select-none">
@@ -2048,27 +2142,56 @@ export default function App() {
                         <i className="fa-solid fa-microphone-lines text-xs"></i>
                     </button>
 
-                    {/* Circular Emerald Green Exit/Finish Button */}
+                    {/* Manual Recalculate button */}
                     <button
                         onClick={() => {
-                            setNavStatus('stopped');
-                            setIsNavigating(false);
-                            setIsCameraLocked(true);
-                            cyclistIndexRef.current = 0;
-                            setCyclistCoords(null);
-                            setCyclistIndex(0);
-                            setSpeedKmh(0);
-                            setNextTrafficLight(null);
-                            audioGuidance.stop();
-                            wakeLockService.releaseWakeLock();
+                            const dest = activeRoute?.coordinates?.[activeRoute.coordinates.length - 1];
+                            const current = cyclistCoords || (userLocation ? [userLocation.lat, userLocation.lng] : null);
+                            if (current && dest) {
+                                lastRerouteTimeRef.current = 0;
+                                handleDynamicReroute(current, dest);
+                            } else {
+                                showToast("Posición no disponible para recalcular.", "warning");
+                            }
                         }}
-                        className="w-10 h-10 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center shadow-md cursor-pointer border-none transition-all ml-1"
-                        title="Finalizar viaje"
+                        className="h-10 px-3 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1.5 cursor-pointer border-none transition-all active:scale-95"
+                        title="Recalcular ruta hacia el destino"
                     >
-                        <i className="fa-solid fa-chevron-down text-sm"></i>
+                        <i className="fa-solid fa-arrows-rotate text-emerald-600"></i>
+                        <span className="hidden sm:inline">Recalcular</span>
+                    </button>
+
+                    {/* Botón Explícito de Salida / Cancelar Navegación */}
+                    <button
+                        onClick={handleExitNavigation}
+                        className="h-10 px-3.5 rounded-full bg-rose-50 hover:bg-rose-100 text-rose-700 font-black text-xs flex items-center gap-1.5 cursor-pointer border border-rose-200 shadow-xs transition-all active:scale-95 ml-1"
+                        title="Finalizar viaje y regresar al planificador"
+                    >
+                        <i className="fa-solid fa-xmark text-sm text-rose-600"></i>
+                        <span>Salir</span>
                     </button>
                 </div>
             </div>
+        </div>
+    );
+
+    const fallbackRecoveryHUD = isNavigating && !activeRoute && (
+        <div className="fixed top-4 left-4 right-4 z-50 max-w-md w-full mx-auto pointer-events-auto bg-white p-4 rounded-3xl shadow-2xl border border-slate-200 flex items-center justify-between animate-slide-down" style={{ boxShadow: '0 12px 35px rgba(0, 0, 0, 0.15)' }}>
+            <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                    <i className="fa-solid fa-arrows-rotate fa-spin text-emerald-700 text-lg"></i>
+                </div>
+                <div className="flex flex-col">
+                    <span className="text-xs font-black text-slate-800">Recalculando tu ruta...</span>
+                    <span className="text-[11px] font-medium text-slate-500">Buscando el mejor trayecto seguro</span>
+                </div>
+            </div>
+            <button
+                onClick={handleExitNavigation}
+                className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs shadow-md border-none cursor-pointer transition-all active:scale-95"
+            >
+                Salir
+            </button>
         </div>
     );
 
@@ -2182,6 +2305,7 @@ export default function App() {
                             title="Fijar origen en el mapa"
                             onSelectLocation={handleSelectOriginLocation}
                             showGpsButton={true}
+                            userLocation={userLocation}
                         />
                         <FormField
                             value={destInput}
@@ -2196,6 +2320,7 @@ export default function App() {
                             title="Fijar destino en el mapa"
                             onSelectLocation={handleSelectDestLocation}
                             showGpsButton={false}
+                            userLocation={userLocation}
                         />
 
                         {/* Mobile Departure Hour & Weather */}
@@ -2851,7 +2976,7 @@ export default function App() {
             )}
 
             {/* 10. Cockpit HUD Overlay during 3D Navigation */}
-            {cockpitHUD}
+            {cockpitHUD || fallbackRecoveryHUD}
 
             {/* ==================== MODALES DE CASOS DE USO INTEGRALES ==================== */}
 
