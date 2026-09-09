@@ -3,6 +3,7 @@ import { HAZARD_TYPES } from '../../utils/quickReportService';
 
 export default function QuickHazardReportButton({
     onReportHazard,
+    onOpenPotholeModal,
     userLocation,
     isNavigating = false,
     className = ''
@@ -13,6 +14,15 @@ export default function QuickHazardReportButton({
         setIsOpen(false);
         if (onReportHazard) {
             onReportHazard(key);
+        }
+    };
+
+    const handleOpenPothole = () => {
+        setIsOpen(false);
+        if (onOpenPotholeModal) {
+            onOpenPotholeModal();
+        } else {
+            handleSelectOption('POTHOLE');
         }
     };
 
@@ -45,7 +55,7 @@ export default function QuickHazardReportButton({
                                         Reporte Rápido en Ruta
                                     </h3>
                                     <p className="text-2xs font-semibold text-slate-500">
-                                        Alerta a otros ciclistas en 1 toque
+                                        Alerta a ciclistas, motos y carros
                                     </p>
                                 </div>
                             </div>
@@ -58,14 +68,41 @@ export default function QuickHazardReportButton({
                             </button>
                         </div>
 
-                        {/* 3 Ultra-simple Options */}
-                        <div className="flex flex-col gap-2.5 pt-1">
+                        {/* Pothole with Photo & Lane Featured Option */}
+                        <button
+                            type="button"
+                            onClick={handleOpenPothole}
+                            className="w-full flex items-center gap-3.5 p-3 rounded-2xl text-left border-2 border-orange-400/80 bg-orange-50/80 cursor-pointer active:scale-98 transition-all hover:shadow-md hover:bg-orange-100/70"
+                        >
+                            <div 
+                                className="w-11 h-11 rounded-xl flex items-center justify-center text-lg text-white shrink-0 shadow-xs bg-orange-600"
+                            >
+                                <i className="fa-solid fa-burst"></i>
+                            </div>
+                            <div className="flex flex-col min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5">
+                                    <span className="text-xs font-black text-slate-900">
+                                        Hueco / Bache en Vía
+                                    </span>
+                                    <span className="text-3xs font-extrabold px-1.5 py-0.5 rounded bg-orange-200 text-orange-900 uppercase">
+                                        Foto + Carril
+                                    </span>
+                                </div>
+                                <span className="text-2xs font-medium text-slate-600 truncate">
+                                    Captura foto y carril (izq/centro/der)
+                                </span>
+                            </div>
+                            <i className="fa-solid fa-camera text-xs text-orange-600 mr-1"></i>
+                        </button>
+
+                        {/* Other 1-touch Options */}
+                        <div className="flex flex-col gap-2 pt-0.5">
                             {hazardOptions.map((opt) => (
                                 <button
                                     key={opt.id}
                                     type="button"
                                     onClick={() => handleSelectOption(opt.id)}
-                                    className="w-full flex items-center gap-3.5 p-3 rounded-2xl text-left border cursor-pointer active:scale-98 transition-all hover:shadow-md"
+                                    className="w-full flex items-center gap-3.5 p-2.5 rounded-2xl text-left border cursor-pointer active:scale-98 transition-all hover:shadow-sm"
                                     style={{
                                         background: opt.bg,
                                         borderColor: opt.border,
@@ -73,7 +110,7 @@ export default function QuickHazardReportButton({
                                     }}
                                 >
                                     <div 
-                                        className="w-11 h-11 rounded-xl flex items-center justify-center text-lg text-white shrink-0 shadow-xs"
+                                        className="w-9 h-9 rounded-xl flex items-center justify-center text-base text-white shrink-0 shadow-xs"
                                         style={{ background: opt.color }}
                                     >
                                         <i className={opt.icon}></i>

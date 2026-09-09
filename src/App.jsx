@@ -44,6 +44,7 @@ import QuickDestinationChips from './components/molecules/QuickDestinationChips'
 import OnboardingTourModal from './components/molecules/OnboardingTourModal';
 import KeyboardShortcutsModal from './components/molecules/KeyboardShortcutsModal';
 import QuickHazardReportButton from './components/molecules/QuickHazardReportButton';
+import PotholeReportModal from './components/molecules/PotholeReportModal';
 import { loadActiveUserReports, saveUserReport, createQuickHazardFeature, syncReport } from './utils/quickReportService';
 import { emitToast } from './utils/toastService';
 import { 
@@ -258,6 +259,7 @@ export default function App() {
         return loadActiveUserReports();
     });
     const [isReporting, setIsReporting] = useState(false);
+    const [isPotholeModalOpen, setIsPotholeModalOpen] = useState(false);
     const [reportingType, setReportingType] = useState('Luminaria Dañada / Boca de lobo');
     const [reportingCoords, setReportingCoords] = useState(null);
     const [isSelectingCoords, setIsSelectingCoords] = useState(false);
@@ -825,8 +827,10 @@ export default function App() {
                         if (!newHudRec) newHudRec = '💡 Tramo con baja iluminación. Enciende luces.';
                         audioGuidance.speakEvent(`light_${nearbyReport.id}`, 'Zona con poca iluminación reportada. Enciende tus luces.', 30, true);
                     } else if (tipo.toLowerCase().includes('hueco') || tipo.toLowerCase().includes('daño') || tipo.toLowerCase().includes('bache')) {
-                        if (!newHudRec) newHudRec = '⚠️ Daño o bache en ciclorruta reportado.';
-                        audioGuidance.speakEvent(`pothole_${nearbyReport.id}`, 'Bache o deterioro en la calzada adelante.', 30, true);
+                        const lane = nearbyReport.properties?.lane;
+                        const laneDesc = lane === 'izquierda' ? 'a la izquierda de la vía' : (lane === 'derecha' ? 'a la derecha de la vía' : (lane === 'centro' ? 'en el centro de la vía' : 'en la calzada'));
+                        if (!newHudRec) newHudRec = `🕳️ Bache ${lane ? `(${lane.toUpperCase()})` : ''} adelante.`;
+                        audioGuidance.speakEvent(`pothole_${nearbyReport.id}`, `Atención, bache reportado ${laneDesc} adelante.`, 30, true);
                     } else {
                         if (!newHudRec) newHudRec = `📢 Reporte ciudadano: ${tipo.split('/')[0]}`;
                         audioGuidance.speakEvent(`rep_${nearbyReport.id}`, `Reporte ciudadano en la vía: ${tipo.split('/')[0]}.`, 30, false);
@@ -1074,8 +1078,10 @@ export default function App() {
                     if (!newGpsHudRec) newGpsHudRec = '💡 Tramo con baja iluminación. Enciende luces.';
                     audioGuidance.speakEvent(`light_gps_${nearbyReport.id}`, 'Zona con poca iluminación reportada. Enciende tus luces.', 30, true);
                 } else if (tipo.toLowerCase().includes('hueco') || tipo.toLowerCase().includes('daño') || tipo.toLowerCase().includes('bache')) {
-                    if (!newGpsHudRec) newGpsHudRec = '⚠️ Daño o bache en ciclorruta reportado.';
-                    audioGuidance.speakEvent(`pothole_gps_${nearbyReport.id}`, 'Bache o deterioro en la calzada adelante.', 30, true);
+                    const lane = nearbyReport.properties?.lane;
+                    const laneDesc = lane === 'izquierda' ? 'a la izquierda de la vía' : (lane === 'derecha' ? 'a la derecha de la vía' : (lane === 'centro' ? 'en el centro de la vía' : 'en la calzada'));
+                    if (!newGpsHudRec) newGpsHudRec = `🕳️ Bache ${lane ? `(${lane.toUpperCase()})` : ''} adelante.`;
+                    audioGuidance.speakEvent(`pothole_gps_${nearbyReport.id}`, `Atención, bache reportado ${laneDesc} adelante.`, 30, true);
                 } else {
                     if (!newGpsHudRec) newGpsHudRec = `📢 Reporte ciudadano: ${tipo.split('/')[0]}`;
                     audioGuidance.speakEvent(`rep_gps_${nearbyReport.id}`, `Reporte ciudadano en la vía: ${tipo.split('/')[0]}.`, 30, false);
@@ -1300,6 +1306,8 @@ export default function App() {
         const type = (customData && customData.tipo_novedad) ? customData.tipo_novedad : reportingType;
         const description = (customData && customData.descripcion) ? customData.descripcion : '';
         const foto = (customData && customData.foto) ? customData.foto : null;
+        const lane = (customData && customData.lane) ? customData.lane : null;
+        const severity = (customData && customData.severity) ? customData.severity : 'moderado';
 
         let updated = false;
         const updatedReports = citizenReports.map(report => {
@@ -1316,7 +1324,9 @@ export default function App() {
                             ...report.properties,
                             numero_votos: report.properties.numero_votos + 1,
                             foto: foto || report.properties.foto,
-                            descripcion: description || report.properties.descripcion
+                            descripcion: description || report.properties.descripcion,
+                            lane: lane || report.properties.lane,
+                            severity: severity || report.properties.severity
                         }
                     };
                 }
@@ -1341,6 +1351,8 @@ export default function App() {
                     tipo_novedad: type,
                     descripcion: description,
                     foto: foto,
+                    lane: lane,
+                    severity: severity,
                     fecha_creacion: new Date().toISOString().split('T')[0],
                     numero_votos: 1,
                     resolvedVotes: 0,
@@ -1405,7 +1417,34 @@ export default function App() {
         // 3. Forward to future cloud sync handler
         await syncReport(feature);
 
-        showToast(`⚠️ Reporte rápido registrado: ${feature.properties.tipo_novedad}. ¡Gracias por alertar a los ciclistas!`, 'success');
+        showToast(`⚠️ Reporte rápido registrado: ${feature.properties.tipo_novedad}. ¡Gracias por alertar a la comunidad!`, 'success');
+        soundService.playNotification('info');
+    };
+
+    // Dedicated Pothole Report handler with photo and lane
+    const handleSavePotholeReport = async ({ lane, foto, severity, descripcion, coords: customCoords }) => {
+        const coords = customCoords 
+            || cyclistCoords 
+            || (userLocation ? [userLocation.lat, userLocation.lng] : null)
+            || (routePoints.origin ? [routePoints.origin.lat, routePoints.origin.lng] : [4.5317, -74.1166]);
+
+        const locName = localitiesMap[localidad]?.fullName || 'Bogotá';
+        const feature = createQuickHazardFeature('POTHOLE', coords, locName, {
+            lane,
+            foto,
+            severity,
+            descripcion
+        });
+
+        // 1. Reactive state update
+        setCitizenReports(prev => [feature, ...prev]);
+        // 2. Persist to localStorage
+        saveUserReport(feature);
+        // 3. Forward to cloud sync
+        await syncReport(feature);
+
+        const laneText = lane === 'izquierda' ? 'a la izquierda' : (lane === 'derecha' ? 'a la derecha' : 'en el centro');
+        showToast(`🕳️ Hueco reportado ${laneText} de la vía con evidencia fotográfica. ¡Gracias!`, 'success');
         soundService.playNotification('info');
     };
 
@@ -2209,6 +2248,7 @@ export default function App() {
             }`}>
                 <QuickHazardReportButton
                     onReportHazard={handleQuickHazardReport}
+                    onOpenPotholeModal={() => setIsPotholeModalOpen(true)}
                     userLocation={userLocation}
                     isNavigating={isNavigating}
                 />
@@ -3021,6 +3061,14 @@ export default function App() {
                 onClose={() => setIsCptedAuditOpen(false)}
                 selectedSegment={selectedSegmentId ? segments[selectedSegmentId] : null}
                 onSaveAudit={handleSaveCptedAudit}
+            />
+            {/* Modal de Reporte de Hueco con Foto y Carril */}
+            <PotholeReportModal
+                isOpen={isPotholeModalOpen}
+                onClose={() => setIsPotholeModalOpen(false)}
+                onSubmitReport={handleSavePotholeReport}
+                userLocation={userLocation}
+                cyclistCoords={cyclistCoords}
             />
 
             {/* Modal de Llegada a Destino */}

@@ -8,6 +8,15 @@ const STORAGE_KEY = 'user_reports';
 export const REPORT_EXPIRY_MS = 60 * 60 * 1000; // 60 minutes visual expiration
 
 export const HAZARD_TYPES = {
+    POTHOLE: {
+        id: 'pothole',
+        label: 'Hueco / Bache en vía',
+        sublabel: 'Trampa o rotura de calzada',
+        icon: 'fa-solid fa-burst',
+        color: '#ea580c',
+        bg: '#fff7ed',
+        border: '#fdba74'
+    },
     LIGHTING: {
         id: 'lighting',
         label: 'Luminaria apagada',
@@ -20,7 +29,7 @@ export const HAZARD_TYPES = {
     OBSTACLE: {
         id: 'obstacle',
         label: 'Obstáculo en vía',
-        sublabel: 'Hueco, escombros o bloqueo',
+        sublabel: 'Escombros o bloqueo',
         icon: 'fa-solid fa-road-barrier',
         color: '#f97316',
         bg: '#fff7ed',
@@ -87,11 +96,16 @@ export function saveUserReport(reportFeature) {
 /**
  * Prepares a standard GeoJSON Feature for a quick hazard report
  */
-export function createQuickHazardFeature(hazardKey, coords, localityName = 'Bogotá') {
-    const hazard = HAZARD_TYPES[hazardKey.toUpperCase()] || HAZARD_TYPES.OBSTACLE;
+export function createQuickHazardFeature(hazardKey, coords, localityName = 'Bogotá', options = {}) {
+    const hazard = HAZARD_TYPES[hazardKey.toUpperCase()] || HAZARD_TYPES.POTHOLE;
     const now = Date.now();
     const id = `quick_hazard_${now}_${Math.random().toString(36).substring(2, 6)}`;
     const timeStr = new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    const lane = options.lane || null; // 'izquierda' | 'centro' | 'derecha'
+    const foto = options.foto || null;
+    const severity = options.severity || 'moderado'; // 'moderado' | 'critico'
+    const customDesc = options.descripcion || `Reporte de ${hazard.label.toLowerCase()} (${timeStr})`;
 
     return {
         type: 'Feature',
@@ -105,7 +119,10 @@ export function createQuickHazardFeature(hazardKey, coords, localityName = 'Bogo
             coordenadas: [coords[0], coords[1]], // Leaflet [lat, lng]
             tipo_novedad: hazard.label,
             hazardKey: hazard.id,
-            descripcion: `Reporte rápido de ciclista (${timeStr})`,
+            descripcion: customDesc,
+            lane: lane,
+            foto: foto,
+            severity: severity,
             fecha_creacion: new Date(now).toISOString().split('T')[0],
             timestamp: now,
             numero_votos: 1,

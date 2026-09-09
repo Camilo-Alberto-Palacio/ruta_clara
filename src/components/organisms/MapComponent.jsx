@@ -1077,14 +1077,21 @@ export default function MapComponent({
             const estado = report.properties.estado;
             const isQuick = Boolean(report.properties.isQuickReport);
 
+            const isPothole = tipo.includes('Hueco') || tipo.includes('destructiva') || tipo.includes('Bache') || report.properties.hazardKey === 'pothole';
+            const lane = report.properties.lane;
+            const severity = report.properties.severity;
+
             // Determine color and icon
             let color = '#f59e0b'; // Amber
             let icon = 'fa-triangle-exclamation';
 
-            if (tipo.includes('Luminaria') || tipo.includes('lobo') || tipo.includes('apagada')) {
+            if (isPothole) {
+                color = '#ea580c'; // Vibrant Orange
+                icon = 'fa-burst';
+            } else if (tipo.includes('Luminaria') || tipo.includes('lobo') || tipo.includes('apagada')) {
                 color = '#f59e0b';
                 icon = 'fa-lightbulb';
-            } else if (tipo.includes('Hueco') || tipo.includes('destructiva') || tipo.includes('Obstáculo') || tipo.includes('vía')) {
+            } else if (tipo.includes('Obstáculo') || tipo.includes('vía')) {
                 color = '#f97316';
                 icon = 'fa-road-barrier';
             } else if (tipo.includes('Inseguridad') || tipo.includes('Atraco') || tipo.includes('peligrosa') || tipo.includes('Zona')) {
@@ -1092,45 +1099,107 @@ export default function MapComponent({
                 icon = 'fa-triangle-exclamation';
             }
 
+            let markerHtml = '';
+            let iconSize = [18, 18];
+            let iconAnchor = [9, 9];
+
+            if (isPothole && lane) {
+                const laneBadge = lane === 'izquierda' ? '⬅️ IZQ' : (lane === 'derecha' ? '➡️ DER' : '⬆️ CEN');
+                iconSize = [58, 22];
+                iconAnchor = [29, 11];
+                markerHtml = `
+                    <div class="citizen-pothole-marker" style="
+                        background: ${severity === 'critico' ? '#dc2626' : '#ea580c'};
+                        border: 2px solid #ffffff;
+                        border-radius: 9999px;
+                        padding: 1.5px 6px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        gap: 3px;
+                        color: #ffffff;
+                        font-weight: 800;
+                        font-size: 8.5px;
+                        font-family: var(--font-heading, sans-serif);
+                        box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+                        cursor: pointer;
+                        white-space: nowrap;
+                    ">
+                        <i class="fa-solid fa-burst" style="font-size: 8px;"></i>
+                        <span>${laneBadge}</span>
+                    </div>
+                `;
+            } else {
+                markerHtml = `
+                    <div class="citizen-report-marker" style="
+                        width: 18px;
+                        height: 18px;
+                        background: ${color};
+                        border: 1.5px solid rgba(255,255,255,0.9);
+                        border-radius: 50%;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        color: #fff;
+                        box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+                        cursor: pointer;
+                    ">
+                        <i class="fa-solid ${icon}" style="font-size: 8px;"></i>
+                    </div>
+                `;
+            }
+
             const marker = L.marker([coords[0], coords[1]], {
                 icon: L.divIcon({
                     className: 'citizen-report-marker-wrapper',
-                    html: `
-                        <div class="citizen-report-marker" style="
-                            width: 18px;
-                            height: 18px;
-                            background: ${color};
-                            border: 1.5px solid rgba(255,255,255,0.9);
-                            border-radius: 50%;
-                            display: flex;
-                            align-items: center;
-                            justify-content: center;
-                            color: #fff;
-                            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-                            cursor: pointer;
-                        ">
-                            <i class="fa-solid ${icon}" style="font-size: 8px;"></i>
-                        </div>
-                    `,
-                    iconSize: [18, 18],
-                    iconAnchor: [9, 9]
+                    html: markerHtml,
+                    iconSize: iconSize,
+                    iconAnchor: iconAnchor
                 })
             });
 
             // Create flat popup element
             const div = document.createElement('div');
-            div.style.minWidth = '190px';
+            div.style.minWidth = '210px';
+            div.style.maxWidth = '260px';
+
+            let laneHtml = '';
+            if (lane) {
+                const laneName = lane === 'izquierda' ? 'Carril Izquierdo ⬅️' : (lane === 'derecha' ? 'Carril Derecho ➡️' : 'Eje Central ⬆️');
+                laneHtml = `
+                    <div style="display: inline-flex; align-items: center; gap: 4px; background: #fff7ed; color: #c2410c; font-weight: 800; font-size: 0.72rem; padding: 2px 8px; border-radius: 9999px; margin-bottom: 0.35rem; border: 1px solid #fdba74;">
+                        <i class="fa-solid fa-arrows-left-right-to-line"></i> ${laneName}
+                    </div>
+                `;
+            }
+
+            let severityHtml = '';
+            if (severity === 'critico') {
+                severityHtml = `
+                    <div style="display: inline-flex; align-items: center; gap: 4px; background: #fef2f2; color: #dc2626; font-weight: 800; font-size: 0.68rem; padding: 1px 6px; border-radius: 6px; margin-bottom: 0.35rem; border: 1px solid #fecaca;">
+                        <i class="fa-solid fa-radiation"></i> Trampa Crítica
+                    </div>
+                `;
+            }
+
             div.innerHTML = `
-                <div style="font-family: var(--font-body); font-size: 0.78rem;">
-                    <h4 style="font-family: var(--font-heading); font-size: 0.85rem; font-weight: 700; margin-bottom: 0.35rem; color: ${color}; display: flex; align-items: center; gap: 0.35rem;">
-                        <i class="fa-solid ${icon}"></i> ${tipo.split('/')[0].trim()}
-                    </h4>
-                    ${report.properties.foto ? `<img src="${report.properties.foto}" style="width: 100%; max-height: 110px; object-fit: cover; border-radius: 8px; margin-bottom: 0.4rem; border: 1px solid #e2e8f0;" alt="Evidencia" />` : ''}
-                    ${report.properties.descripcion ? `<p style="margin: 0 0 0.35rem 0; font-style: italic; color: var(--text-primary); font-size: 0.72rem;">"${report.properties.descripcion}"</p>` : ''}
-                    <p style="margin: 0 0 0.3rem 0; color: var(--text-secondary);"><b>Votos:</b> <span class="vote-count" style="font-weight: 700; color: #f59e0b;">${votos}</span></p>
-                    <p style="margin: 0 0 0.3rem 0; color: var(--text-secondary); font-size: 0.72rem;"><b>Reportado:</b> ${fecha}</p>
-                    <p style="margin: 0 0 0.4rem 0; color: var(--text-secondary); font-size: 0.72rem;"><b>Estado:</b> <span style="text-transform: capitalize; color: #10b981; font-weight: 600;">${estado}</span></p>
-                    <button class="btn-flat btn-flat-primary respaldar-btn" style="width: 100%; font-size: 0.72rem; padding: 0.35rem; border-radius: 6px;">
+                <div style="font-family: var(--font-body, sans-serif); font-size: 0.78rem;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.25rem;">
+                        <h4 style="font-family: var(--font-heading, sans-serif); font-size: 0.85rem; font-weight: 800; margin: 0; color: ${color}; display: flex; align-items: center; gap: 0.35rem;">
+                            <i class="fa-solid ${icon}"></i> ${tipo.split('/')[0].trim()}
+                        </h4>
+                    </div>
+                    ${laneHtml}
+                    ${severityHtml}
+                    ${report.properties.foto ? `<img src="${report.properties.foto}" style="width: 100%; max-height: 125px; object-fit: cover; border-radius: 8px; margin-bottom: 0.4rem; border: 1px solid #cbd5e1; box-shadow: 0 1px 3px rgba(0,0,0,0.1);" alt="Evidencia" />` : ''}
+                    ${report.properties.descripcion ? `<p style="margin: 0 0 0.35rem 0; font-style: italic; color: #334155; font-size: 0.72rem; line-height: 1.3;">"${report.properties.descripcion}"</p>` : ''}
+                    <div style="font-size: 0.68rem; color: #64748b; font-weight: 600; margin-bottom: 0.35rem;">
+                        🚲 Ciclistas • 🛵 Motos • 🚗 Vehículos
+                    </div>
+                    <p style="margin: 0 0 0.25rem 0; color: #64748b; font-size: 0.72rem;"><b>Votos de respaldo:</b> <span class="vote-count" style="font-weight: 800; color: #ea580c;">${votos}</span></p>
+                    <p style="margin: 0 0 0.25rem 0; color: #64748b; font-size: 0.7rem;"><b>Reportado:</b> ${fecha}</p>
+                    <p style="margin: 0 0 0.4rem 0; color: #64748b; font-size: 0.7rem;"><b>Estado:</b> <span style="text-transform: capitalize; color: #10b981; font-weight: 700;">${estado}</span></p>
+                    <button class="btn-flat btn-flat-primary respaldar-btn" style="width: 100%; font-size: 0.72rem; padding: 0.4rem; border-radius: 8px; font-weight: 700; cursor: pointer;">
                         <i class="fa-solid fa-circle-arrow-up"></i> Respaldar Reporte
                     </button>
                 </div>
@@ -1148,7 +1217,8 @@ export default function MapComponent({
             });
 
             marker.bindPopup(div, { className: 'custom-leaflet-popup-citizen' });
-            marker.bindTooltip(`<strong>Reporte:</strong> ${tipo.split('/')[0]} (Votos: ${votos})`, { sticky: true, className: 'custom-tooltip' });
+            const tooltipLane = lane ? ` (${lane.toUpperCase()})` : '';
+            marker.bindTooltip(`<strong>Reporte:</strong> ${tipo.split('/')[0]}${tooltipLane} (Votos: ${votos})`, { sticky: true, className: 'custom-tooltip' });
 
             marker.addTo(map);
             citizenReportLayersRef.current.push(marker);

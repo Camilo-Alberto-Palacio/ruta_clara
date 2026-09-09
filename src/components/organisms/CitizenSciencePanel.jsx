@@ -21,6 +21,8 @@ export default function CitizenSciencePanel({
     const [filterTab, setFilterTab] = useState('activos'); // 'activos' | 'resueltos' | 'caravanas'
     const [reportDescription, setReportDescription] = useState('');
     const [reportPhoto, setReportPhoto] = useState(null);
+    const [reportLane, setReportLane] = useState('centro'); // 'izquierda' | 'centro' | 'derecha'
+    const [isCompressingPhoto, setIsCompressingPhoto] = useState(false);
     const fileInputRef = useRef(null);
 
     // Filter reports for the active locality
@@ -39,7 +41,7 @@ export default function CitizenSciencePanel({
 
     const getIconClass = (type) => {
         if (type.includes('Luminaria') || type.includes('lobo')) return 'fa-lightbulb text-yellow';
-        if (type.includes('Hueco') || type.includes('destructiva')) return 'fa-triangle-exclamation text-yellow';
+        if (type.includes('Hueco') || type.includes('destructiva') || type.includes('Bache')) return 'fa-burst text-orange-500';
         return 'fa-hand text-red';
     };
 
@@ -47,32 +49,65 @@ export default function CitizenSciencePanel({
         const file = e.target.files?.[0];
         if (!file) return;
 
-        if (file.size > 2.5 * 1024 * 1024) {
-            emitToast("La fotografía no debe superar 2.5 MB para garantizar rendimiento.", "warning");
-            return;
-        }
-
+        setIsCompressingPhoto(true);
         const reader = new FileReader();
         reader.onload = (loadEvt) => {
-            setReportPhoto(loadEvt.target.result);
+            const img = new Image();
+            img.onload = () => {
+                let width = img.width;
+                let height = img.height;
+                const maxDim = 800;
+
+                if (width > height && width > maxDim) {
+                    height = Math.round((height * maxDim) / width);
+                    width = maxDim;
+                } else if (height > maxDim) {
+                    width = Math.round((width * maxDim) / height);
+                    height = maxDim;
+                }
+
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+
+                const compressed = canvas.toDataURL('image/jpeg', 0.72);
+                setReportPhoto(compressed);
+                setIsCompressingPhoto(false);
+            };
+            img.onerror = () => {
+                emitToast("Error al leer la fotografía.", "error");
+                setIsCompressingPhoto(false);
+            };
+            img.src = loadEvt.target.result;
+        };
+        reader.onerror = () => {
+            emitToast("Error al cargar el archivo de imagen.", "error");
+            setIsCompressingPhoto(false);
         };
         reader.readAsDataURL(file);
     };
+
+    const isPotholeType = reportingType.includes('Hueco') || reportingType.includes('Bache') || reportingType.includes('vía') || reportingType.includes('destructiva');
 
     const handleFormSubmit = () => {
         onSubmitReport({
             tipo_novedad: reportingType,
             coordenadas: reportingCoords,
             descripcion: reportDescription.trim(),
-            foto: reportPhoto
+            foto: reportPhoto,
+            lane: isPotholeType ? reportLane : null
         });
         setReportDescription('');
         setReportPhoto(null);
+        setReportLane('centro');
     };
 
     const handleFormCancel = () => {
         setReportDescription('');
         setReportPhoto(null);
+        setReportLane('centro');
         onCancelReport();
     };
 
@@ -161,9 +196,16 @@ export default function CitizenSciencePanel({
                                                         </div>
                                                     )}
                                                     <div className="overflow-hidden">
-                                                        <span className="text-xs font-bold text-slate-800 block truncate">
-                                                            {report.properties.tipo_novedad.split('/')[0].trim()}
-                                                        </span>
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span className="text-xs font-bold text-slate-800 block truncate">
+                                                                {report.properties.tipo_novedad.split('/')[0].trim()}
+                                                            </span>
+                                                            {report.properties.lane && (
+                                                                <span className="text-3xs font-extrabold px-1.5 py-0.2 rounded bg-orange-100 text-orange-800 shrink-0">
+                                                                    {report.properties.lane === 'izquierda' ? '⬅️ Izq' : (report.properties.lane === 'derecha' ? '➡️ Der' : '⬆️ Centro')}
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                         <span className="text-3xs text-slate-400">
                                                             {report.properties.fecha_creacion} • {report.properties.localidad}
                                                         </span>
@@ -283,6 +325,37 @@ export default function CitizenSciencePanel({
                         </select>
                     </div>
 
+                    {/* Selector de Carril para Huecos / Baches */}
+                    {isPotholeType && (
+                        <div className="flex flex-col gap-1 p-2 rounded-xl bg-orange-50/70 border border-orange-200/80 animate-fade-in">
+                            <label className="text-2xs font-extrabold text-orange-950 flex items-center gap-1.5">
+                                <i className="fa-solid fa-arrows-left-right-to-line text-orange-600"></i>
+                                <span>¿En qué parte de la vía está el hueco?</span>
+                            </label>
+                            <div className="grid grid-cols-3 gap-1.5 pt-0.5">
+                                {[
+                                    { id: 'izquierda', label: 'Izquierda', icon: 'fa-arrow-left' },
+                                    { id: 'centro', label: 'Centro', icon: 'fa-arrow-up' },
+                                    { id: 'derecha', label: 'Derecha', icon: 'fa-arrow-right' }
+                                ].map(item => (
+                                    <button
+                                        key={item.id}
+                                        type="button"
+                                        onClick={() => setReportLane(item.id)}
+                                        className={`py-1.5 px-2 rounded-xl text-2xs font-bold border cursor-pointer flex items-center justify-center gap-1.5 transition-all active:scale-95 ${
+                                            reportLane === item.id
+                                                ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                                                : 'bg-white text-slate-700 border-slate-200 hover:bg-orange-100/50'
+                                        }`}
+                                    >
+                                        <i className={`fa-solid ${item.icon} text-3xs`}></i>
+                                        <span>{item.label}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
                     <div className="report-select-wrapper">
                         <label className="control-label text-2xs font-bold text-slate-600">Ubicación Geográfica</label>
                         <div
@@ -341,9 +414,20 @@ export default function CitizenSciencePanel({
                             <button
                                 type="button"
                                 onClick={() => fileInputRef.current?.click()}
+                                disabled={isCompressingPhoto}
                                 className="py-2 px-3 rounded-xl border border-slate-200 bg-slate-50 text-xs text-slate-600 flex items-center justify-center gap-2 cursor-pointer hover:bg-emerald-50/50"
                             >
-                                <i className="fa-solid fa-camera text-emerald-600"></i> Tomar o Subir Foto
+                                {isCompressingPhoto ? (
+                                    <>
+                                        <i className="fa-solid fa-spinner fa-spin text-emerald-600"></i>
+                                        <span>Procesando fotografía...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <i className="fa-solid fa-camera text-emerald-600"></i>
+                                        <span>Tomar o Subir Foto</span>
+                                    </>
+                                )}
                             </button>
                         )}
                         <input
