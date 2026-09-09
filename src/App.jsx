@@ -2069,27 +2069,26 @@ export default function App() {
                 {/* Quick Simulation Pause/Speed controls floating on right */}
                 {navigationMode === 'simulated' && (
                     <div 
-                        className="pointer-events-auto flex items-center gap-1.5 p-1.5 rounded-2xl shadow-2xl border"
-                        style={{ background: '#ffffff', color: '#0f172a', borderColor: '#e2e8f0', boxShadow: '0 8px 25px rgba(0, 0, 0, 0.1)' }}
+                        className="pointer-events-auto flex items-center gap-1.5 p-1 rounded-2xl shadow-xl border bg-white/95 backdrop-blur-md border-slate-200"
+                        style={{ boxShadow: '0 8px 25px rgba(0, 0, 0, 0.1)' }}
                     >
                         <button
                             onClick={() => setNavStatus(navStatus === 'running' ? 'paused' : 'running')}
-                            className="w-8 h-8 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center cursor-pointer border-none text-xs hover:bg-slate-200 transition-colors"
-                            title={navStatus === 'running' ? "Pausar" : "Reanudar"}
+                            className="w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 flex items-center justify-center cursor-pointer border-none text-sm transition-colors active:scale-95"
+                            title={navStatus === 'running' ? "Pausar simulación" : "Reanudar simulación"}
                         >
-                            <i className={`fa-solid ${navStatus === 'running' ? 'fa-pause text-amber-500' : 'fa-play text-emerald-600'}`}></i>
+                            <i className={`fa-solid ${navStatus === 'running' ? 'fa-pause text-amber-600' : 'fa-play text-emerald-600'}`}></i>
                         </button>
-                        {[1, 2, 5].map(mult => (
-                            <button
-                                key={mult}
-                                onClick={() => setNavSpeedMultiplier(mult)}
-                                className={`px-2 py-1 rounded-lg text-2xs font-extrabold cursor-pointer border-none transition-all ${
-                                    navSpeedMultiplier === mult ? 'bg-emerald-600 text-white shadow-xs' : 'bg-transparent text-slate-600 hover:text-slate-900'
-                                }`}
-                            >
-                                {mult}x
-                            </button>
-                        ))}
+                        <button
+                            onClick={() => {
+                                const next = navSpeedMultiplier === 1 ? 2 : (navSpeedMultiplier === 2 ? 4 : 1);
+                                setNavSpeedMultiplier(next);
+                            }}
+                            className="h-10 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-black text-xs cursor-pointer border-none transition-all active:scale-95"
+                            title="Toca para cambiar la velocidad de simulación"
+                        >
+                            {navSpeedMultiplier}x
+                        </button>
                     </div>
                 )}
             </div>
@@ -2113,10 +2112,10 @@ export default function App() {
                 </div>
             )}
 
-            {/* 3. Bottom Card (Arrival Time, Remaining Km, Audio & Exit - Pure White & Emerald Green) */}
+            {/* 3. Bottom Card Minimalista (Hora de llegada, distancia restante, silenciar voz y salir) */}
             <div 
-                className="pointer-events-auto max-w-md w-full mx-auto rounded-3xl shadow-2xl p-4 border flex items-center justify-between animate-slide-up"
-                style={{ background: '#ffffff', color: '#0f172a', borderColor: '#e2e8f0', boxShadow: '0 12px 35px rgba(0, 0, 0, 0.15)' }}
+                className="pointer-events-auto max-w-md w-full mx-auto rounded-3xl shadow-2xl p-4 border flex items-center justify-between animate-slide-up bg-white border-slate-200"
+                style={{ boxShadow: '0 12px 35px rgba(0, 0, 0, 0.15)' }}
             >
                 <div className="flex flex-col">
                     <span className="text-2xl font-black tracking-tight text-slate-900">
@@ -2134,7 +2133,7 @@ export default function App() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                    {/* Voice Mute/Unmute toggle button */}
+                    {/* Botón único de Silenciar / Activar Voz */}
                     <button
                         onClick={() => {
                             const nextVal = !voiceEnabled;
@@ -2147,75 +2146,23 @@ export default function App() {
                                 showToast("🔇 Asistente de voz silenciado", "info");
                             }
                         }}
-                        className={`w-10 h-10 rounded-full flex items-center justify-center cursor-pointer border-none transition-all ${
+                        className={`w-11 h-11 rounded-2xl flex items-center justify-center cursor-pointer border-none transition-all active:scale-95 ${
                             voiceEnabled 
                                 ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' 
-                                : 'bg-rose-100 text-rose-600'
+                                : 'bg-rose-50 text-rose-600 border border-rose-200'
                         }`}
                         title={voiceEnabled ? "Silenciar voz" : "Activar voz"}
                     >
-                        <i className={`fa-solid ${voiceEnabled ? 'fa-volume-high text-sm' : 'fa-volume-xmark text-sm'}`}></i>
+                        <i className={`fa-solid ${voiceEnabled ? 'fa-volume-high text-base text-emerald-600' : 'fa-volume-xmark text-base text-rose-500'}`}></i>
                     </button>
 
-                    {/* Test Voice Assistant button */}
-                    <button
-                        onClick={() => {
-                            audioGuidance.speakRaw("Asistente de voz de Ruta Clara funcionando correctamente.");
-                            showToast("🗣️ Probando voz del asistente...", "info");
-                        }}
-                        className="w-10 h-10 rounded-full bg-slate-100 text-slate-700 hover:bg-slate-200 flex items-center justify-center cursor-pointer border-none transition-all"
-                        title="Probar asistente de voz"
-                    >
-                        <i className="fa-solid fa-volume-high text-xs"></i>
-                    </button>
-
-                    {/* Change Voice button */}
-                    <button
-                        onClick={() => {
-                            const voices = audioGuidance.getVoices();
-                            if (voices.length > 1) {
-                                const currentUri = audioGuidance.selectedVoiceURI;
-                                const currIdx = voices.findIndex(v => v.uri === currentUri);
-                                const nextIdx = (currIdx + 1) % voices.length;
-                                const nextVoice = voices[nextIdx];
-                                audioGuidance.setVoice(nextVoice.uri);
-                                audioGuidance.speakRaw(`Voz ${nextVoice.name}.`);
-                            } else {
-                                audioGuidance.speakRaw("Voz en español seleccionada.");
-                            }
-                        }}
-                        className="w-10 h-10 rounded-full bg-slate-100 text-slate-700 hover:bg-slate-200 flex items-center justify-center cursor-pointer border-none transition-all"
-                        title="Cambiar tipo de voz"
-                    >
-                        <i className="fa-solid fa-microphone-lines text-xs"></i>
-                    </button>
-
-                    {/* Manual Recalculate button */}
-                    <button
-                        onClick={() => {
-                            const dest = activeRoute?.coordinates?.[activeRoute.coordinates.length - 1];
-                            const current = cyclistCoords || (userLocation ? [userLocation.lat, userLocation.lng] : null);
-                            if (current && dest) {
-                                lastRerouteTimeRef.current = 0;
-                                handleDynamicReroute(current, dest);
-                            } else {
-                                showToast("Posición no disponible para recalcular.", "warning");
-                            }
-                        }}
-                        className="h-10 px-3 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1.5 cursor-pointer border-none transition-all active:scale-95"
-                        title="Recalcular ruta hacia el destino"
-                    >
-                        <i className="fa-solid fa-arrows-rotate text-emerald-600"></i>
-                        <span className="hidden sm:inline">Recalcular</span>
-                    </button>
-
-                    {/* Botón Explícito de Salida / Cancelar Navegación */}
+                    {/* Botón Principal de Salida / Cancelar Navegación */}
                     <button
                         onClick={handleExitNavigation}
-                        className="h-10 px-3.5 rounded-full bg-rose-50 hover:bg-rose-100 text-rose-700 font-black text-xs flex items-center gap-1.5 cursor-pointer border border-rose-200 shadow-xs transition-all active:scale-95 ml-1"
-                        title="Finalizar viaje y regresar al planificador"
+                        className="h-11 px-4 rounded-2xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-extrabold text-xs flex items-center gap-2 cursor-pointer border border-rose-200 shadow-xs transition-all active:scale-95"
+                        title="Finalizar viaje y regresar al mapa"
                     >
-                        <i className="fa-solid fa-xmark text-sm text-rose-600"></i>
+                        <i className="fa-solid fa-xmark text-base text-rose-600"></i>
                         <span>Salir</span>
                     </button>
                 </div>
