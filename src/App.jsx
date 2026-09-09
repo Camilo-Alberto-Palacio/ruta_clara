@@ -45,9 +45,10 @@ import OnboardingTourModal from './components/molecules/OnboardingTourModal';
 import KeyboardShortcutsModal from './components/molecules/KeyboardShortcutsModal';
 import QuickHazardReportButton from './components/molecules/QuickHazardReportButton';
 import PotholeReportModal from './components/molecules/PotholeReportModal';
+import HazardProximityPill from './components/molecules/HazardProximityPill';
 import MapSettingsModal from './components/molecules/MapSettingsModal';
 import VoiceSearchModal from './components/molecules/VoiceSearchModal';
-import { loadActiveUserReports, saveUserReport, createQuickHazardFeature, syncReport } from './utils/quickReportService';
+import { HAZARD_TYPES, loadActiveUserReports, saveUserReport, createQuickHazardFeature, syncReport } from './utils/quickReportService';
 import { emitToast } from './utils/toastService';
 import { 
     calculateRisk, 
@@ -262,6 +263,8 @@ export default function App() {
     });
     const [isReporting, setIsReporting] = useState(false);
     const [isPotholeModalOpen, setIsPotholeModalOpen] = useState(false);
+    const [potholeModalInitialType, setPotholeModalInitialType] = useState('POTHOLE');
+    const [proximityHazardPhoto, setProximityHazardPhoto] = useState(null);
     const [isVoiceSearchOpen, setIsVoiceSearchOpen] = useState(false);
     const [reportingType, setReportingType] = useState('Luminaria Dañada / Boca de lobo');
     const [reportingCoords, setReportingCoords] = useState(null);
@@ -791,6 +794,41 @@ export default function App() {
                     return (distDeg * 111000) <= 80;
                 });
 
+                // Comprobación de proximidad a novedades con foto para el HUD miniatura
+                let closestSimPhotoHazard = null;
+                let minSimPhotoDist = 999;
+                citizenReportsRef.current.forEach(rep => {
+                    if (!rep.properties?.foto) return;
+                    const rCoords = rep.properties?.coordenadas;
+                    if (!rCoords) return;
+                    const dM = Math.sqrt(Math.pow(currentCoord[0] - rCoords[0], 2) + Math.pow(currentCoord[1] - rCoords[1], 2)) * 111000;
+                    if (dM <= 80 && dM < minSimPhotoDist) {
+                        minSimPhotoDist = dM;
+                        closestSimPhotoHazard = {
+                            id: rep.properties.id,
+                            tipo: rep.properties.tipo_novedad,
+                            foto: rep.properties.foto,
+                            lane: rep.properties.lane,
+                            severity: rep.properties.severity,
+                            descripcion: rep.properties.descripcion,
+                            distMeters: Math.round(dM)
+                        };
+                    }
+                });
+
+                if (closestSimPhotoHazard) {
+                    setProximityHazardPhoto(closestSimPhotoHazard);
+                    const laneSpoken = closestSimPhotoHazard.lane ? ` en el carril ${closestSimPhotoHazard.lane}` : '';
+                    audioGuidance.speakEvent(
+                        `photo_sim_${closestSimPhotoHazard.id}`,
+                        `Atención, reporte con foto de ${closestSimPhotoHazard.tipo.split('/')[0]}${laneSpoken} a ${closestSimPhotoHazard.distMeters} metros.`,
+                        30,
+                        true
+                    );
+                } else {
+                    setProximityHazardPhoto(null);
+                }
+
                 const currentRisk = riskInfo.level;
                 if (lastRiskLevelRef.current === 'Alto' && currentRisk !== 'Alto') {
                     setHudRecommendation('🟢 Zona segura alcanzada. Has salido del sector de riesgo.');
@@ -1054,6 +1092,41 @@ export default function App() {
                 const distDeg = Math.sqrt(Math.pow(latitude - rCoords[0], 2) + Math.pow(longitude - rCoords[1], 2));
                 return (distDeg * 111000) <= 80;
             });
+
+            // Comprobación de proximidad a novedades con foto para el HUD GPS
+            let closestGpsPhotoHazard = null;
+            let minGpsPhotoDist = 999;
+            citizenReportsRef.current.forEach(rep => {
+                if (!rep.properties?.foto) return;
+                const rCoords = rep.properties?.coordenadas;
+                if (!rCoords) return;
+                const dM = Math.sqrt(Math.pow(latitude - rCoords[0], 2) + Math.pow(longitude - rCoords[1], 2)) * 111000;
+                if (dM <= 80 && dM < minGpsPhotoDist) {
+                    minGpsPhotoDist = dM;
+                    closestGpsPhotoHazard = {
+                        id: rep.properties.id,
+                        tipo: rep.properties.tipo_novedad,
+                        foto: rep.properties.foto,
+                        lane: rep.properties.lane,
+                        severity: rep.properties.severity,
+                        descripcion: rep.properties.descripcion,
+                        distMeters: Math.round(dM)
+                    };
+                }
+            });
+
+            if (closestGpsPhotoHazard) {
+                setProximityHazardPhoto(closestGpsPhotoHazard);
+                const laneSpoken = closestGpsPhotoHazard.lane ? ` en el carril ${closestGpsPhotoHazard.lane}` : '';
+                audioGuidance.speakEvent(
+                    `photo_gps_${closestGpsPhotoHazard.id}`,
+                    `Atención, reporte con foto de ${closestGpsPhotoHazard.tipo.split('/')[0]}${laneSpoken} a ${closestGpsPhotoHazard.distMeters} metros.`,
+                    30,
+                    true
+                );
+            } else {
+                setProximityHazardPhoto(null);
+            }
 
             const nearbyLight = trafficLightsRef.current.find(light => {
                 const distDeg = Math.sqrt(
@@ -1424,15 +1497,15 @@ export default function App() {
         soundService.playNotification('info');
     };
 
-    // Dedicated Pothole Report handler with photo and lane
-    const handleSavePotholeReport = async ({ lane, foto, severity, descripcion, coords: customCoords }) => {
+    // Dedicated Citizen Hazard Report handler with photo, category, lane and severity
+    const handleSaveHazardReport = async ({ hazardType = 'POTHOLE', lane, foto, severity, descripcion, coords: customCoords }) => {
         const coords = customCoords 
             || cyclistCoords 
             || (userLocation ? [userLocation.lat, userLocation.lng] : null)
             || (routePoints.origin ? [routePoints.origin.lat, routePoints.origin.lng] : [4.5317, -74.1166]);
 
         const locName = localitiesMap[localidad]?.fullName || 'Bogotá';
-        const feature = createQuickHazardFeature('POTHOLE', coords, locName, {
+        const feature = createQuickHazardFeature(hazardType, coords, locName, {
             lane,
             foto,
             severity,
@@ -1446,10 +1519,12 @@ export default function App() {
         // 3. Forward to cloud sync
         await syncReport(feature);
 
-        const laneText = lane === 'izquierda' ? 'a la izquierda' : (lane === 'derecha' ? 'a la derecha' : 'en el centro');
-        showToast(`🕳️ Hueco reportado ${laneText} de la vía con evidencia fotográfica. ¡Gracias!`, 'success');
+        const hazardInfo = HAZARD_TYPES[hazardType.toUpperCase()] || HAZARD_TYPES.POTHOLE;
+        const laneText = lane ? (lane === 'izquierda' ? ' a la izquierda' : (lane === 'derecha' ? ' a la derecha' : ' en el centro')) : '';
+        showToast(`⚠️ ${hazardInfo.label} reportado${laneText}${foto ? ' con evidencia fotográfica' : ''}. ¡Gracias!`, 'success');
         soundService.playNotification('info');
     };
+    const handleSavePotholeReport = handleSaveHazardReport;
 
     const handleZoomToReport = (coords) => {
         setZoomToCoords(coords);
@@ -2010,6 +2085,7 @@ export default function App() {
         setCyclistIndex(0);
         setSpeedKmh(0);
         setNextTrafficLight(null);
+        setProximityHazardPhoto(null);
         audioGuidance.stop();
         wakeLockService.releaseWakeLock();
         if (isMobile) {
@@ -2055,6 +2131,14 @@ export default function App() {
                     </div>
                 )}
             </div>
+
+            {/* 1b. Miniatura No Invasiva de Peligro Fotográfico Cercano */}
+            {proximityHazardPhoto && (
+                <HazardProximityPill 
+                    hazard={proximityHazardPhoto}
+                    onDismiss={() => setProximityHazardPhoto(null)}
+                />
+            )}
 
             {/* 2. Floating Circular Speedometer Widget (Lower Left - Pure White & Emerald Green) */}
             <div className="flex justify-between items-end w-full max-w-lg mx-auto mb-2">
@@ -2204,7 +2288,10 @@ export default function App() {
             }`}>
                 <QuickHazardReportButton
                     onReportHazard={handleQuickHazardReport}
-                    onOpenPotholeModal={() => setIsPotholeModalOpen(true)}
+                    onOpenPotholeModal={(typeKey = 'POTHOLE') => {
+                        setPotholeModalInitialType(typeKey);
+                        setIsPotholeModalOpen(true);
+                    }}
                     userLocation={userLocation}
                     isNavigating={isNavigating}
                 />
@@ -2919,13 +3006,14 @@ export default function App() {
                 selectedSegment={selectedSegmentId ? segments[selectedSegmentId] : null}
                 onSaveAudit={handleSaveCptedAudit}
             />
-            {/* Modal de Reporte de Hueco con Foto y Carril */}
+            {/* Modal de Reporte Ciudadano con Foto, Categoría y Carril */}
             <PotholeReportModal
                 isOpen={isPotholeModalOpen}
                 onClose={() => setIsPotholeModalOpen(false)}
-                onSubmitReport={handleSavePotholeReport}
+                onSubmitReport={handleSaveHazardReport}
                 userLocation={userLocation}
                 cyclistCoords={cyclistCoords}
+                initialHazardType={potholeModalInitialType}
             />
 
             {/* Modal de Ajustes y Capas de Mapa (Experiencia organizada y moderna) */}

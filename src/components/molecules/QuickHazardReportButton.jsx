@@ -17,19 +17,21 @@ export default function QuickHazardReportButton({
         }
     };
 
-    const handleOpenPothole = () => {
+    const handleOpenModalWithType = (typeKey = 'POTHOLE') => {
         setIsOpen(false);
         if (onOpenPotholeModal) {
-            onOpenPotholeModal();
+            onOpenPotholeModal(typeKey);
         } else {
-            handleSelectOption('POTHOLE');
+            handleSelectOption(typeKey);
         }
     };
 
     const hazardOptions = [
-        HAZARD_TYPES.LIGHTING,
-        HAZARD_TYPES.OBSTACLE,
-        HAZARD_TYPES.DANGER
+        { key: 'POTHOLE', ...HAZARD_TYPES.POTHOLE },
+        { key: 'LIGHTING', ...HAZARD_TYPES.LIGHTING },
+        { key: 'OBSTACLE', ...HAZARD_TYPES.OBSTACLE },
+        { key: 'TRAFFIC_LIGHT', ...HAZARD_TYPES.TRAFFIC_LIGHT },
+        { key: 'DANGER', ...HAZARD_TYPES.DANGER }
     ];
 
     return (
@@ -47,15 +49,15 @@ export default function QuickHazardReportButton({
                         {/* Header */}
                         <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                             <div className="flex items-center gap-2.5">
-                                <div className="w-9 h-9 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center text-base shadow-xs">
+                                <div className="w-9 h-9 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center text-base shadow-xs">
                                     <i className="fa-solid fa-bullhorn"></i>
                                 </div>
                                 <div>
                                     <h3 className="text-sm font-black text-slate-900 leading-tight">
-                                        Reporte Rápido en Ruta
+                                        Reporte en Ruta con Foto
                                     </h3>
                                     <p className="text-2xs font-semibold text-slate-500">
-                                        Alerta a ciclistas, motos y carros
+                                        Alerta a ciclistas, motos y conductores
                                     </p>
                                 </div>
                             </div>
@@ -68,41 +70,44 @@ export default function QuickHazardReportButton({
                             </button>
                         </div>
 
-                        {/* Pothole with Photo & Lane Featured Option */}
+                        {/* Featured Photo Action */}
                         <button
                             type="button"
-                            onClick={handleOpenPothole}
-                            className="w-full flex items-center gap-3.5 p-3 rounded-2xl text-left border-2 border-orange-400/80 bg-orange-50/80 cursor-pointer active:scale-98 transition-all hover:shadow-md hover:bg-orange-100/70"
+                            onClick={() => handleOpenModalWithType('POTHOLE')}
+                            className="w-full flex items-center gap-3.5 p-3 rounded-2xl text-left border-2 border-emerald-500/80 bg-emerald-50/80 cursor-pointer active:scale-98 transition-all hover:shadow-md hover:bg-emerald-100/70"
                         >
                             <div 
-                                className="w-11 h-11 rounded-xl flex items-center justify-center text-lg text-white shrink-0 shadow-xs bg-orange-600"
+                                className="w-11 h-11 rounded-xl flex items-center justify-center text-lg text-white shrink-0 shadow-xs bg-emerald-600"
                             >
-                                <i className="fa-solid fa-burst"></i>
+                                <i className="fa-solid fa-camera"></i>
                             </div>
                             <div className="flex flex-col min-w-0 flex-1">
                                 <div className="flex items-center gap-1.5">
                                     <span className="text-xs font-black text-slate-900">
-                                        Hueco / Bache en Vía
+                                        Tomar Foto de Novedad
                                     </span>
-                                    <span className="text-3xs font-extrabold px-1.5 py-0.5 rounded bg-orange-200 text-orange-900 uppercase">
-                                        Foto + Carril
+                                    <span className="text-3xs font-extrabold px-1.5 py-0.5 rounded bg-emerald-200 text-emerald-900 uppercase">
+                                        Foto + Vía
                                     </span>
                                 </div>
                                 <span className="text-2xs font-medium text-slate-600 truncate">
-                                    Captura foto y carril (izq/centro/der)
+                                    Captura imagen, carril y gravedad
                                 </span>
                             </div>
-                            <i className="fa-solid fa-camera text-xs text-orange-600 mr-1"></i>
+                            <i className="fa-solid fa-arrow-right text-xs text-emerald-700 mr-1"></i>
                         </button>
 
-                        {/* Other 1-touch Options */}
-                        <div className="flex flex-col gap-2 pt-0.5">
+                        {/* All Hazard Options */}
+                        <div className="flex flex-col gap-1.5 pt-0.5 max-h-60 overflow-y-auto pr-0.5">
+                            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mb-0.5">
+                                Selecciona el tipo de peligro:
+                            </span>
                             {hazardOptions.map((opt) => (
                                 <button
                                     key={opt.id}
                                     type="button"
-                                    onClick={() => handleSelectOption(opt.id)}
-                                    className="w-full flex items-center gap-3.5 p-2.5 rounded-2xl text-left border cursor-pointer active:scale-98 transition-all hover:shadow-sm"
+                                    onClick={() => handleOpenModalWithType(opt.key)}
+                                    className="w-full flex items-center gap-3 p-2 rounded-2xl text-left border cursor-pointer active:scale-98 transition-all hover:shadow-sm"
                                     style={{
                                         background: opt.bg,
                                         borderColor: opt.border,
@@ -110,20 +115,22 @@ export default function QuickHazardReportButton({
                                     }}
                                 >
                                     <div 
-                                        className="w-9 h-9 rounded-xl flex items-center justify-center text-base text-white shrink-0 shadow-xs"
+                                        className="w-8 h-8 rounded-xl flex items-center justify-center text-sm text-white shrink-0 shadow-xs"
                                         style={{ background: opt.color }}
                                     >
                                         <i className={opt.icon}></i>
                                     </div>
                                     <div className="flex flex-col min-w-0 flex-1">
-                                        <span className="text-xs font-black text-slate-900">
+                                        <span className="text-xs font-black text-slate-900 leading-tight">
                                             {opt.label}
                                         </span>
-                                        <span className="text-2xs font-medium text-slate-500 truncate">
+                                        <span className="text-3xs font-medium text-slate-500 truncate">
                                             {opt.sublabel}
                                         </span>
                                     </div>
-                                    <i className="fa-solid fa-chevron-right text-xs text-slate-400 mr-1"></i>
+                                    <span className="text-3xs text-slate-500 flex items-center gap-1">
+                                        <i className="fa-solid fa-camera text-2xs"></i>
+                                    </span>
                                 </button>
                             ))}
                         </div>

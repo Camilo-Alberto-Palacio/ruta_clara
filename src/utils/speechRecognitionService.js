@@ -9,6 +9,20 @@ export function isSpeechRecognitionSupported() {
     return Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
 }
 
+export async function requestMicrophonePermission() {
+    if (typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            stream.getTracks().forEach(track => track.stop());
+            return true;
+        } catch (err) {
+            console.warn('[Microphone] Permiso denegado o no disponible:', err);
+            return false;
+        }
+    }
+    return false;
+}
+
 export class VoiceDictationEngine {
     constructor({ onResult, onInterim, onError, onStart, onEnd, lang = 'es-CO' }) {
         this.onResult = onResult || (() => {});
@@ -80,13 +94,16 @@ export class VoiceDictationEngine {
         }
     }
 
-    start() {
+    async start() {
         if (!this.recognition) {
             this.onError('not-supported');
             return false;
         }
 
         try {
+            // Solicitar permiso nativo de micrófono explícitamente para Android WebView y navegadores
+            await requestMicrophonePermission();
+
             if (this.isListening) {
                 this.recognition.stop();
             }

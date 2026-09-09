@@ -1088,16 +1088,41 @@ export default function MapComponent({
             if (isPothole) {
                 color = '#ea580c'; // Vibrant Orange
                 icon = 'fa-burst';
-            } else if (tipo.includes('Luminaria') || tipo.includes('lobo') || tipo.includes('apagada')) {
+            } else if (tipo.includes('Luminaria') || tipo.includes('lobo') || tipo.includes('apagada') || report.properties.hazardKey === 'lighting') {
                 color = '#f59e0b';
                 icon = 'fa-lightbulb';
-            } else if (tipo.includes('Obstáculo') || tipo.includes('vía')) {
+            } else if (tipo.includes('Obstáculo') || tipo.includes('vía') || report.properties.hazardKey === 'obstacle') {
                 color = '#f97316';
                 icon = 'fa-road-barrier';
-            } else if (tipo.includes('Inseguridad') || tipo.includes('Atraco') || tipo.includes('peligrosa') || tipo.includes('Zona')) {
+            } else if (tipo.includes('Semáforo') || tipo.includes('Semaforo') || report.properties.hazardKey === 'traffic_light') {
+                color = '#10b981';
+                icon = 'fa-traffic-light';
+            } else if (tipo.includes('Inseguridad') || tipo.includes('Atraco') || tipo.includes('peligrosa') || tipo.includes('Zona') || report.properties.hazardKey === 'danger') {
                 color = '#ef4444';
                 icon = 'fa-triangle-exclamation';
             }
+
+            const hasPhoto = Boolean(report.properties.foto);
+            const photoBadge = hasPhoto ? `
+                <span style="
+                    position: absolute;
+                    top: -4px;
+                    right: -4px;
+                    width: 13px;
+                    height: 13px;
+                    background: #059669;
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 7px;
+                    color: white;
+                    border: 1.5px solid white;
+                    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+                ">
+                    <i class="fa-solid fa-camera"></i>
+                </span>
+            ` : '';
 
             let markerHtml = '';
             let iconSize = [18, 18];
@@ -1109,6 +1134,7 @@ export default function MapComponent({
                 iconAnchor = [29, 11];
                 markerHtml = `
                     <div class="citizen-pothole-marker" style="
+                        position: relative;
                         background: ${severity === 'critico' ? '#dc2626' : '#ea580c'};
                         border: 2px solid #ffffff;
                         border-radius: 9999px;
@@ -1127,11 +1153,13 @@ export default function MapComponent({
                     ">
                         <i class="fa-solid fa-burst" style="font-size: 8px;"></i>
                         <span>${laneBadge}</span>
+                        ${photoBadge}
                     </div>
                 `;
             } else {
                 markerHtml = `
                     <div class="citizen-report-marker" style="
+                        position: relative;
                         width: 18px;
                         height: 18px;
                         background: ${color};
@@ -1145,6 +1173,7 @@ export default function MapComponent({
                         cursor: pointer;
                     ">
                         <i class="fa-solid ${icon}" style="font-size: 8px;"></i>
+                        ${photoBadge}
                     </div>
                 `;
             }
@@ -1218,7 +1247,7 @@ export default function MapComponent({
 
             marker.bindPopup(div, { className: 'custom-leaflet-popup-citizen' });
             const tooltipLane = lane ? ` (${lane.toUpperCase()})` : '';
-            marker.bindTooltip(`<strong>Reporte:</strong> ${tipo.split('/')[0]}${tooltipLane} (Votos: ${votos})`, { sticky: true, className: 'custom-tooltip' });
+            marker.bindTooltip(`<strong>Reporte:</strong> ${tipo.split('/')[0]}${tooltipLane}${hasPhoto ? ' 📷 [Foto]' : ''} (Votos: ${votos})`, { sticky: true, className: 'custom-tooltip' });
 
             marker.addTo(map);
             citizenReportLayersRef.current.push(marker);

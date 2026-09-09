@@ -1,5 +1,6 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { emitToast } from '../../utils/toastService';
+import { HAZARD_TYPES } from '../../utils/quickReportService';
 
 /**
  * Compresses an image file using an off-screen HTML5 canvas to keep
@@ -48,8 +49,10 @@ export default function PotholeReportModal({
     onClose,
     onSubmitReport,
     userLocation,
-    cyclistCoords
+    cyclistCoords,
+    initialHazardType = 'POTHOLE'
 }) {
+    const [selectedType, setSelectedType] = useState('POTHOLE');
     const [lane, setLane] = useState('centro'); // 'izquierda' | 'centro' | 'derecha'
     const [severity, setSeverity] = useState('moderado'); // 'moderado' | 'critico'
     const [photo, setPhoto] = useState(null);
@@ -57,7 +60,17 @@ export default function PotholeReportModal({
     const [description, setDescription] = useState('');
     const fileInputRef = useRef(null);
 
+    // Sync initial hazard type when modal opens
+    useEffect(() => {
+        if (isOpen) {
+            const normalized = (initialHazardType || 'POTHOLE').toUpperCase();
+            setSelectedType(HAZARD_TYPES[normalized] ? normalized : 'POTHOLE');
+        }
+    }, [isOpen, initialHazardType]);
+
     if (!isOpen) return null;
+
+    const currentHazard = HAZARD_TYPES[selectedType] || HAZARD_TYPES.POTHOLE;
 
     const handlePhotoChange = async (e) => {
         const file = e.target.files?.[0];
@@ -81,6 +94,7 @@ export default function PotholeReportModal({
             || [4.5317, -74.1166];
 
         onSubmitReport({
+            hazardType: selectedType,
             lane,
             severity,
             foto: photo,
@@ -98,25 +112,28 @@ export default function PotholeReportModal({
 
     return (
         <div 
-            className="fixed inset-0 z-[1000] flex items-end sm:items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-fade-in"
+            className="fixed inset-0 z-[1000] flex items-end sm:items-center justify-center p-3 sm:p-4 bg-slate-900/50 backdrop-blur-xs animate-fade-in"
             onClick={onClose}
         >
             <div 
-                className="bg-white rounded-3xl shadow-2xl border border-slate-200/90 w-full max-w-sm sm:max-w-md overflow-hidden p-5 flex flex-col gap-3.5 animate-scale-up text-slate-800"
+                className="bg-white rounded-3xl shadow-2xl border border-slate-200/90 w-full max-w-sm sm:max-w-md max-h-[92vh] overflow-y-auto p-5 flex flex-col gap-3 animate-scale-up text-slate-800"
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* Header */}
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
                     <div className="flex items-center gap-2.5">
-                        <div className="w-10 h-10 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center text-lg shadow-xs">
-                            <i className="fa-solid fa-burst"></i>
+                        <div 
+                            className="w-10 h-10 rounded-2xl flex items-center justify-center text-lg text-white shadow-xs transition-colors"
+                            style={{ backgroundColor: currentHazard.color }}
+                        >
+                            <i className={currentHazard.icon}></i>
                         </div>
                         <div>
                             <h3 className="text-sm font-black text-slate-900 leading-tight">
-                                Reportar Hueco / Bache en Vía
+                                Reportar Novedad en Ruta
                             </h3>
                             <p className="text-2xs font-semibold text-slate-500">
-                                Alerta para ciclistas, motos y vehículos
+                                Alerta comunitaria con evidencia fotográfica
                             </p>
                         </div>
                     </div>
@@ -129,16 +146,49 @@ export default function PotholeReportModal({
                     </button>
                 </div>
 
-                {/* 1. Photo Capture / Upload */}
+                {/* 1. Category Chips */}
                 <div>
                     <label className="text-2xs font-extrabold text-slate-700 uppercase tracking-wider block mb-1.5">
-                        1. Evidencia Fotográfica
+                        1. Tipo de Novedad
                     </label>
+                    <div className="flex flex-wrap gap-1.5">
+                        {Object.entries(HAZARD_TYPES).map(([key, item]) => {
+                            const isSelected = selectedType === key;
+                            return (
+                                <button
+                                    key={key}
+                                    type="button"
+                                    onClick={() => setSelectedType(key)}
+                                    className={`py-1.5 px-2.5 rounded-xl text-2xs font-extrabold cursor-pointer flex items-center gap-1.5 transition-all border ${
+                                        isSelected
+                                            ? 'text-white shadow-xs'
+                                            : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                                    }`}
+                                    style={isSelected ? { backgroundColor: item.color, borderColor: item.color } : {}}
+                                >
+                                    <i className={item.icon}></i>
+                                    <span>{item.label.split('/')[0]}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                {/* 2. Photo Capture / Upload */}
+                <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-2xs font-extrabold text-slate-700 uppercase tracking-wider">
+                            2. Evidencia Fotográfica
+                        </label>
+                        <span className="text-3xs font-semibold text-emerald-600">
+                            Recomendado para verificar
+                        </span>
+                    </div>
 
                     {photo ? (
                         <div className="relative w-full h-32 rounded-2xl overflow-hidden border border-slate-200 shadow-inner group">
-                            <img src={photo} alt="Evidencia de bache" className="w-full h-full object-cover" />
-                            <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                            <img src={photo} alt="Evidencia de reporte" className="w-full h-full object-cover" />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                                 <button
                                     type="button"
                                     onClick={() => fileInputRef.current?.click()}
@@ -154,8 +204,8 @@ export default function PotholeReportModal({
                                     <i className="fa-solid fa-trash mr-1"></i> Quitar
                                 </button>
                             </div>
-                            <span className="absolute bottom-2 left-2 px-2 py-0.5 rounded-lg bg-emerald-600/90 text-white text-3xs font-bold backdrop-blur-xs flex items-center gap-1">
-                                <i className="fa-solid fa-circle-check"></i> Foto lista
+                            <span className="absolute bottom-2 left-2 px-2 py-0.5 rounded-lg bg-emerald-600/95 text-white text-3xs font-bold backdrop-blur-xs flex items-center gap-1 shadow-xs">
+                                <i className="fa-solid fa-circle-check"></i> Foto adjunta
                             </span>
                         </div>
                     ) : (
@@ -163,7 +213,7 @@ export default function PotholeReportModal({
                             type="button"
                             onClick={() => fileInputRef.current?.click()}
                             disabled={isCompressing}
-                            className="w-full h-24 rounded-2xl border-2 border-dashed border-orange-300 hover:border-orange-500 bg-orange-50/50 hover:bg-orange-50 flex flex-col items-center justify-center gap-1.5 text-orange-700 cursor-pointer transition-all active:scale-98"
+                            className="w-full h-24 rounded-2xl border-2 border-dashed border-emerald-300 hover:border-emerald-500 bg-emerald-50/40 hover:bg-emerald-50 flex flex-col items-center justify-center gap-1.5 text-emerald-700 cursor-pointer transition-all active:scale-98"
                         >
                             {isCompressing ? (
                                 <>
@@ -172,11 +222,11 @@ export default function PotholeReportModal({
                                 </>
                             ) : (
                                 <>
-                                    <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center text-orange-600">
+                                    <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600">
                                         <i className="fa-solid fa-camera text-sm"></i>
                                     </div>
-                                    <span className="text-xs font-black">Tomar o Subir Foto del Hueco</span>
-                                    <span className="text-3xs text-orange-500 font-medium">Ayuda a medir su tamaño y profundidad</span>
+                                    <span className="text-xs font-black">Tomar o Subir Fotografía</span>
+                                    <span className="text-3xs text-slate-500 font-medium">Permite alertar visualmente a quienes se acerquen</span>
                                 </>
                             )}
                         </button>
@@ -192,10 +242,10 @@ export default function PotholeReportModal({
                     />
                 </div>
 
-                {/* 2. Lane Selector (Izquierda, Centro, Derecha) */}
+                {/* 3. Lane Selector (Izquierda, Centro, Derecha) */}
                 <div>
                     <label className="text-2xs font-extrabold text-slate-700 uppercase tracking-wider block mb-1.5">
-                        2. ¿En qué carril / sector de la vía está?
+                        3. ¿En qué carril / sector de la vía está?
                     </label>
                     <div className="grid grid-cols-3 gap-2">
                         {[
@@ -209,14 +259,14 @@ export default function PotholeReportModal({
                                     key={item.id}
                                     type="button"
                                     onClick={() => setLane(item.id)}
-                                    className={`py-2.5 px-2 rounded-2xl border cursor-pointer flex flex-col items-center justify-center gap-1 transition-all active:scale-95 ${
+                                    className={`py-2 px-1.5 rounded-2xl border cursor-pointer flex flex-col items-center justify-center gap-1 transition-all active:scale-95 ${
                                         isSelected
                                             ? 'border-emerald-600 bg-emerald-50 text-emerald-900 shadow-sm ring-2 ring-emerald-500/20'
                                             : 'border-slate-200 bg-slate-50/60 hover:bg-slate-100 text-slate-600'
                                     }`}
                                 >
-                                    <div className={`w-7 h-7 rounded-xl flex items-center justify-center text-xs ${
-                                        isSelected ? 'bg-emerald-600 text-white' : 'bg-slate-200/80 text-slate-600'
+                                    <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs ${
+                                        isSelected ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600'
                                     }`}>
                                         <i className={`fa-solid ${item.icon}`}></i>
                                     </div>
@@ -228,10 +278,10 @@ export default function PotholeReportModal({
                     </div>
                 </div>
 
-                {/* 3. Severity Selector */}
+                {/* 4. Severity Selector */}
                 <div>
                     <label className="text-2xs font-extrabold text-slate-700 uppercase tracking-wider block mb-1.5">
-                        3. Peligrosidad
+                        4. Nivel de Peligro
                     </label>
                     <div className="grid grid-cols-2 gap-2">
                         <button
@@ -261,7 +311,7 @@ export default function PotholeReportModal({
                     </div>
                 </div>
 
-                {/* 4. Description (Optional) */}
+                {/* 5. Description (Optional) */}
                 <div>
                     <label className="text-2xs font-semibold text-slate-500 block mb-1">
                         Detalle adicional (opcional):
@@ -270,7 +320,7 @@ export default function PotholeReportModal({
                         type="text"
                         value={description}
                         onChange={(e) => setDescription(e.target.value)}
-                        placeholder="Ej: Tapa de alcantarilla sin rejilla, hueco profundo..."
+                        placeholder="Ej: Tapa sin rejilla, poste caído, charco profundo..."
                         className="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:border-emerald-500 transition-colors"
                         maxLength={100}
                     />
@@ -279,7 +329,7 @@ export default function PotholeReportModal({
                 {/* GPS Notice */}
                 <div className="text-[10px] text-slate-400 flex items-center justify-center gap-1.5 py-0.5">
                     <i className="fa-solid fa-location-crosshairs text-emerald-600"></i>
-                    <span>Se fijará en tu ubicación GPS actual de la ruta</span>
+                    <span>Se registrará en tu posición GPS actual</span>
                 </div>
 
                 {/* Footer Buttons */}
@@ -290,7 +340,7 @@ export default function PotholeReportModal({
                         className="flex-1 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white font-extrabold text-xs shadow-md border-none cursor-pointer flex items-center justify-center gap-2 transition-all"
                     >
                         <i className="fa-solid fa-check"></i>
-                        <span>Publicar Reporte de Hueco</span>
+                        <span>Publicar Reporte {photo ? 'con Foto' : ''}</span>
                     </button>
                     <button
                         type="button"
@@ -304,3 +354,4 @@ export default function PotholeReportModal({
         </div>
     );
 }
+

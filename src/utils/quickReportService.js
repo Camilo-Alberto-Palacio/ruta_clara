@@ -35,6 +35,15 @@ export const HAZARD_TYPES = {
         bg: '#fff7ed',
         border: '#fed7aa'
     },
+    TRAFFIC_LIGHT: {
+        id: 'traffic_light',
+        label: 'Semáforo averiado',
+        sublabel: 'Apagado o intermitente',
+        icon: 'fa-solid fa-traffic-light',
+        color: '#10b981',
+        bg: '#ecfdf5',
+        border: '#a7f3d0'
+    },
     DANGER: {
         id: 'danger',
         label: 'Zona peligrosa',
