@@ -45,6 +45,7 @@ import OnboardingTourModal from './components/molecules/OnboardingTourModal';
 import KeyboardShortcutsModal from './components/molecules/KeyboardShortcutsModal';
 import QuickHazardReportButton from './components/molecules/QuickHazardReportButton';
 import PotholeReportModal from './components/molecules/PotholeReportModal';
+import MapSettingsModal from './components/molecules/MapSettingsModal';
 import { loadActiveUserReports, saveUserReport, createQuickHazardFeature, syncReport } from './utils/quickReportService';
 import { emitToast } from './utils/toastService';
 import { 
@@ -2094,7 +2095,12 @@ export default function App() {
             {!isCameraLocked && (
                 <div className="pointer-events-auto flex justify-center mb-3 animate-fade-in">
                     <button
-                        onClick={() => setIsCameraLocked(true)}
+                        onClick={() => {
+                            setIsCameraLocked(true);
+                            if (cyclistCoords) {
+                                setZoomToCoords(cyclistCoords);
+                            }
+                        }}
                         className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-2xl border-2 border-white cursor-pointer active:scale-95 transition-all"
                         style={{ boxShadow: '0 8px 25px rgba(16, 185, 129, 0.45)' }}
                     >
@@ -2440,118 +2446,6 @@ export default function App() {
                     >
                         <i className="fa-solid fa-crosshairs"></i>
                     </button>
-
-                    {/* Consolidated Options Button */}
-                    <div className="relative">
-                        <button 
-                            onClick={() => {
-                                setMobileLayersOpen(!mobileLayersOpen);
-                            }}
-                            className={`fab-btn animate-fade-in ${mobileLayersOpen ? 'active' : ''}`}
-                            title="Opciones de Mapa"
-                        >
-                            <i className="fa-solid fa-sliders"></i>
-                        </button>
-                        {mobileLayersOpen && (
-                            <div className="absolute right-12 top-0 bg-white/95 backdrop-blur-md border border-slate-200 p-4 rounded-2xl shadow-xl z-20 w-64 text-slate-800 animate-fade-in flex flex-col gap-3">
-                                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5 border-b border-slate-100 pb-1.5">
-                                    <i className="fa-solid fa-sliders text-emerald-600"></i> Ajustes de Mapa
-                                </h4>
-                                
-                                {/* Localidad switcher inline */}
-                                <div className="flex flex-col gap-1">
-                                    <span className="text-[10px] font-bold text-slate-400 uppercase">Localidad Activa:</span>
-                                    <div className="flex gap-1 bg-slate-100 p-0.5 rounded-lg">
-                                        {Object.keys(localitiesMap).map(key => (
-                                            <button
-                                                key={key}
-                                                onClick={() => handleLocalidadChange(key)}
-                                                className={`flex-1 py-1 rounded text-2xs font-bold border-none cursor-pointer ${
-                                                    localidad === key ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-200'
-                                                }`}
-                                                style={localidad === key ? { background: '#059669', color: '#fff' } : {}}
-                                            >
-                                                {localitiesMap[key].name}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                {/* View Mode Toggle Inline */}
-                                <div className="flex justify-between items-center py-1.5 border-t border-slate-100 mt-1">
-                                    <span className="text-2xs font-bold text-slate-700">Modo Científico</span>
-                                    <input 
-                                        type="checkbox" 
-                                        checked={viewMode === 'tech'} 
-                                        onChange={() => setViewMode(prev => prev === 'citizen' ? 'tech' : 'citizen')}
-                                        className="accent-emerald-600 w-4 h-4 cursor-pointer"
-                                    />
-                                </div>
-
-                                {/* Map Style Selector Inline */}
-                                <div className="flex flex-col gap-1 border-t border-slate-100 pt-2 pb-1">
-                                    <span className="text-[10px] font-bold text-slate-400 uppercase">Estilo de Mapa:</span>
-                                    <div className="flex gap-1 bg-slate-100 p-0.5 rounded-lg">
-                                        {[
-                                            { key: 'light', label: 'Calles (Claro)', icon: 'fa-sun' },
-                                            { key: 'terrain', label: 'Relieve (Topográfico)', icon: 'fa-mountain' }
-                                        ].map(opt => (
-                                            <button
-                                                key={opt.key}
-                                                onClick={() => setMapStyle(opt.key)}
-                                                className={`flex-1 py-1 rounded text-[10px] font-bold border-none cursor-pointer flex items-center justify-center gap-1 ${
-                                                    mapStyle === opt.key ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-650 hover:bg-slate-200'
-                                                }`}
-                                                style={mapStyle === opt.key ? { background: '#059669', color: '#fff' } : {}}
-                                            >
-                                                <i className={`fa-solid ${opt.icon}`}></i>
-                                                {opt.label}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                {/* Map Layers List */}
-                                <div className="border-t border-slate-100 pt-2 flex flex-col gap-1.5">
-                                    <span className="text-[10px] font-bold text-slate-450 uppercase">Capas del Mapa:</span>
-                                    <div className="flex flex-col gap-1 max-h-40 overflow-y-auto text-2xs">
-                                        <label className="flex justify-between items-center py-1 border-b border-slate-50">
-                                            <span className="text-slate-750">Límites Localidades</span>
-                                            <input type="checkbox" checked={mapLayers.localities} onChange={e => setMapLayers(p=>({...p, localities: e.target.checked}))} className="accent-emerald-600 w-3.5 h-3.5"/>
-                                        </label>
-                                        <label className="flex justify-between items-center py-1 border-b border-slate-50">
-                                            <span className="text-slate-750">CAIs Policía</span>
-                                            <input type="checkbox" checked={mapLayers.cais} onChange={e => setMapLayers(p=>({...p, cais: e.target.checked}))} className="accent-emerald-600 w-3.5 h-3.5"/>
-                                        </label>
-                                        <label className="flex justify-between items-center py-1 border-b border-slate-50">
-                                            <span className="text-slate-755">Obras IDU</span>
-                                            <input type="checkbox" checked={mapLayers.construction} onChange={e => setMapLayers(p=>({...p, construction: e.target.checked}))} className="accent-emerald-600 w-3.5 h-3.5"/>
-                                        </label>
-                                        <label className="flex justify-between items-center py-1 border-b border-slate-50">
-                                            <span className="text-slate-755">Accidentes</span>
-                                            <input type="checkbox" checked={mapLayers.accidents} onChange={e => setMapLayers(p=>({...p, accidents: e.target.checked}))} className="accent-emerald-600 w-3.5 h-3.5"/>
-                                        </label>
-                                        <label className="flex justify-between items-center py-1 border-b border-slate-50">
-                                            <span className="text-slate-755">Robos 24h</span>
-                                            <input type="checkbox" checked={mapLayers.robberies} onChange={e => setMapLayers(p=>({...p, robberies: e.target.checked}))} className="accent-emerald-600 w-3.5 h-3.5"/>
-                                        </label>
-                                        <label className="flex justify-between items-center py-1 border-b border-slate-50">
-                                            <span className="text-slate-755">Trancones</span>
-                                            <input type="checkbox" checked={mapLayers.trafficJams} onChange={e => setMapLayers(p=>({...p, trafficJams: e.target.checked}))} className="accent-emerald-600 w-3.5 h-3.5"/>
-                                        </label>
-                                        <label className="flex justify-between items-center py-1 border-b border-slate-50">
-                                            <span className="text-slate-755">Semáforos</span>
-                                            <input type="checkbox" checked={mapLayers.trafficLights} onChange={e => setMapLayers(p=>({...p, trafficLights: e.target.checked}))} className="accent-emerald-600 w-3.5 h-3.5"/>
-                                        </label>
-                                        <label className="flex justify-between items-center py-1">
-                                            <span className="text-slate-755">Reportes Ciudadanos</span>
-                                            <input type="checkbox" checked={mapLayers.citizenReports} onChange={e => setMapLayers(p=>({...p, citizenReports: e.target.checked}))} className="accent-emerald-600 w-3.5 h-3.5"/>
-                                        </label>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                    </div>
                 </div>
             )}
 
@@ -3069,6 +2963,21 @@ export default function App() {
                 onSubmitReport={handleSavePotholeReport}
                 userLocation={userLocation}
                 cyclistCoords={cyclistCoords}
+            />
+
+            {/* Modal de Ajustes y Capas de Mapa (Experiencia organizada y moderna) */}
+            <MapSettingsModal
+                isOpen={mobileLayersOpen}
+                onClose={() => setMobileLayersOpen(false)}
+                localidad={localidad}
+                onLocalidadChange={handleLocalidadChange}
+                localitiesMap={localitiesMap}
+                viewMode={viewMode}
+                onViewModeChange={setViewMode}
+                mapStyle={mapStyle}
+                onMapStyleChange={setMapStyle}
+                mapLayers={mapLayers}
+                onMapLayersChange={setMapLayers}
             />
 
             {/* Modal de Llegada a Destino */}

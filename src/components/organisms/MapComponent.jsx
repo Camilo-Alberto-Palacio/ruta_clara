@@ -1558,9 +1558,9 @@ export default function MapComponent({
             const currentCenter = map.getCenter();
             const distMeters = currentCenter ? currentCenter.distanceTo(cyclistCoords) : 0;
 
-            if (map.getZoom() < 16 || distMeters > 90) {
-                // Immediate lock-in if zoomed out or recently recentered from afar
-                map.setView(cyclistCoords, 17);
+            if (distMeters > 160) {
+                // If recently recentered from far away, re-center preserving current user zoom
+                map.setView(cyclistCoords, map.getZoom());
             } else if (navSpeedMultiplier >= 5) {
                 // At 5x high speed, lock camera synchronously to marker frame
                 // This eliminates Leaflet animation cancel latency and stops all camera/marker jitter
