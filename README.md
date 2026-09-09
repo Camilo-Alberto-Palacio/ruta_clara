@@ -1,8 +1,8 @@
-# SafeCycle Bogotá 🚲
+# Ruta Clara 🚲
 
-**Simulador Predictivo de Seguridad en Ciclorrutas para Bogotá, Colombia**
+**Sistema Inteligente de Navegación Segura y Predicción de Riesgo en Ciclorrutas para Bogotá, Colombia**
 
-SafeCycle Bogotá es una aplicación web interactiva de investigación que modela y predice el riesgo de inseguridad en la infraestructura ciclista de Bogotá (ciclorrutas). Fue desarrollada como MVP (Producto Mínimo Viable) por el Semillero de Desarrollo de Software, enfocándose inicialmente en las localidades de **Usme** y **Rafael Uribe Uribe**, y expandida posteriormente a las **20 localidades oficiales** del Distrito Capital.
+Ruta Clara (anteriormente SafeCycle Bogotá) es una aplicación web y móvil interactiva desarrollada en el marco del Semillero de Desarrollo de Software. La plataforma combina un modelo predictivo geoespacial de riesgo (CPTED, criminalidad, iluminación, siniestralidad, obras IDU y ciencia ciudadana) con un sistema de navegación paso a paso por voz, dictado inteligente de destinos y reporte comunitario de huecos con evidencia fotográfica.
 
 ---
 
@@ -80,11 +80,25 @@ Los siguientes documentos de soporte se encuentran en la raíz del repositorio:
   - Distribución de riesgo: Alto / Medio / Bajo.
 - Visualización tipo Chart.js con gráfico de barras de distribución.
 
-### 5. Modo Ciudadano vs. Modo Investigador
+### 5. Modo Ciudadano vs. Modo Investigador (Científico)
 - **Modo Ciudadano**: Vista simplificada para planificar rutas seguras cotidianas.
-- **Modo Investigador**: Acceso completo al simulador, estadísticas y herramientas de análisis de tramos individuales.
+- **Modo Investigador (Científico)**: Acceso al simulador distrital What-If, calibración empírica, priorización de inversión IDU/UAESP y fichas de auditoría CPTED de campo.
 
----
+### 6. Navegación Paso a Paso & Cockpit Minimalista (Regla del Niño de 7 Años)
+- Asistente de navegación en tiempo real con indicaciones de giro por voz y visuales.
+- **Minimalismo absoluto en ruta**: barra inferior depurada con únicamente indicador de tiempo/distancia, botón único de audio (silenciar/activar) y botón de salida.
+- **Recálculo dinámico 100% automático**: si el ciclista se desvía del camino, la aplicación recalcula la ruta en segundo plano sin exigir interacción manual.
+- Control de simulación compacto con velocidad cíclica (1x/2x/4x).
+
+### 7. Dictado de Destinos por Voz
+- Acceso directo desde la pantalla principal y barra inferior para dictar el destino manos libres con guantes.
+- Reconocimiento de voz adaptado al español colombiano (`es-CO`) con chips de respaldo táctiles ante el ruido del tráfico.
+- Enrutamiento automático con confirmación auditiva.
+
+### 8. Ciencia Ciudadana y Reporte de Huecos con Fotografía
+- Botón flotante accesible de 1 toque (estilo Waze) para reportar peligros en la vía.
+- Modal especializado para huecos/baches: selección de carril (izquierda, centro, derecha), severidad y captura de fotos con cámara o galería.
+- Almacenamiento local con caducidad automática de 60 minutos para garantizar datos actualizados.
 
 ## Arquitectura del Software
 
