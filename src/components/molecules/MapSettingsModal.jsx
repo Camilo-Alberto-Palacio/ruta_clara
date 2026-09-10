@@ -81,12 +81,12 @@ export default function MapSettingsModal({
                                 currentUser.photoURL ? (
                                     <img 
                                         src={currentUser.photoURL} 
-                                        alt={currentUser.displayName} 
+                                        alt={currentUser.displayName || 'Ciclista'} 
                                         className="w-10 h-10 rounded-full object-cover border-2 border-emerald-500 shadow-2xs" 
                                     />
                                 ) : (
                                     <div className="w-10 h-10 rounded-full bg-emerald-600 text-white font-black text-sm flex items-center justify-center shadow-2xs">
-                                        {(currentUser.displayName || 'U').charAt(0).toUpperCase()}
+                                        {(currentUser.displayName || currentUser.email?.charAt(0) || 'U').toUpperCase()}
                                     </div>
                                 )
                             ) : (
@@ -96,10 +96,10 @@ export default function MapSettingsModal({
                             )}
                             <div>
                                 <h4 className="text-xs font-black text-slate-900 m-0">
-                                    {currentUser ? currentUser.displayName : 'Cuenta y Perfil Ciudadano'}
+                                    {currentUser ? (currentUser.displayName || 'Ciclista Registrado') : 'Cuenta y Perfil Ciudadano'}
                                 </h4>
                                 <p className="text-2xs text-slate-500 m-0">
-                                    {currentUser ? currentUser.email : 'Inicia sesión con Google para sincronizar'}
+                                    {currentUser ? (currentUser.email || '') : 'Inicia sesión con Google para sincronizar'}
                                 </p>
                             </div>
                         </div>

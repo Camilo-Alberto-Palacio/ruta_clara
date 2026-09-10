@@ -57,7 +57,7 @@ export default function FloatingHeader({
                 <button
                     onClick={onOpenAuthModal}
                     className="flex items-center gap-1.5 p-1 sm:px-2.5 sm:py-1 rounded-full bg-white hover:bg-slate-50 border border-slate-200 shadow-2xs transition-all cursor-pointer text-slate-700 active:scale-95 ml-1"
-                    title={currentUser ? `Perfil: ${currentUser.displayName}` : "Iniciar sesión con Google"}
+                    title={currentUser ? `Perfil: ${currentUser.displayName || 'Ciclista'}` : "Iniciar sesión con Google"}
                     aria-label="Perfil y cuenta de usuario"
                 >
                     {currentUser ? (
@@ -65,16 +65,16 @@ export default function FloatingHeader({
                             {currentUser.photoURL ? (
                                 <img 
                                     src={currentUser.photoURL} 
-                                    alt={currentUser.displayName} 
+                                    alt={currentUser.displayName || 'Ciclista'} 
                                     className="w-7 h-7 rounded-full object-cover border border-emerald-500 shadow-2xs"
                                 />
                             ) : (
                                 <div className="w-7 h-7 rounded-full bg-emerald-600 text-white font-black text-xs flex items-center justify-center shadow-2xs">
-                                    {(currentUser.displayName || 'U').charAt(0).toUpperCase()}
+                                    {(currentUser.displayName || currentUser.email?.charAt(0) || 'U').toUpperCase()}
                                 </div>
                             )}
                             <span className="hidden md:inline text-xs font-bold text-slate-800 max-w-[85px] truncate">
-                                {currentUser.displayName.split(' ')[0]}
+                                {(currentUser.displayName || currentUser.email?.split('@')[0] || 'Ciclista').split(' ')[0]}
                             </span>
                         </>
                     ) : (

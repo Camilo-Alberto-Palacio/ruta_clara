@@ -81,7 +81,7 @@ class AuthService {
                         provider: 'google'
                     };
                     this.setUser(mappedUser);
-                } else if (this.currentUser) {
+                } else if (this.currentUser && this.currentUser.provider === 'google') {
                     this.setUser(null);
                 }
             });

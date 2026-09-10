@@ -82,12 +82,12 @@ export default function AuthModal({
                             {currentUser.photoURL ? (
                                 <img 
                                     src={currentUser.photoURL} 
-                                    alt={currentUser.displayName} 
+                                    alt={currentUser.displayName || 'Ciclista'} 
                                     className="w-20 h-20 rounded-full object-cover border-3 border-emerald-500 shadow-md"
                                 />
                             ) : (
                                 <div className="w-20 h-20 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-2xl font-black border-3 border-emerald-500 shadow-md">
-                                    {(currentUser.displayName || 'U').charAt(0).toUpperCase()}
+                                    {(currentUser.displayName || currentUser.email?.charAt(0) || 'U').toUpperCase()}
                                 </div>
                             )}
                             <div 
@@ -99,10 +99,10 @@ export default function AuthModal({
                         </div>
 
                         <h2 className="text-xl font-extrabold text-slate-900 tracking-tight mb-0.5">
-                            {currentUser.displayName}
+                            {currentUser.displayName || 'Ciclista Registrado'}
                         </h2>
                         <p className="text-xs text-slate-500 mb-3 font-medium">
-                            {currentUser.email}
+                            {currentUser.email || ''}
                         </p>
 
                         <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold mb-5">
