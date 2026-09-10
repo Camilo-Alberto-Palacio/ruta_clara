@@ -166,6 +166,23 @@ class AuthService {
     }
 
     /**
+     * Ingresar temporalmente como Invitado / Modo Explorador
+     */
+    loginAsGuest() {
+        const guestUser = {
+            uid: 'guest_' + Date.now(),
+            displayName: 'Ciclista Explorador',
+            email: 'invitado@rutaclara.co',
+            photoURL: null,
+            role: 'Ciclista Ciudadano',
+            provider: 'guest',
+            isGuest: true
+        };
+        this.setUser(guestUser);
+        return guestUser;
+    }
+
+    /**
      * Cerrar sesión
      */
     async logout() {

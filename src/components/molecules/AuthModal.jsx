@@ -9,6 +9,7 @@ export default function AuthModal({
     showToast = () => {}
 }) {
     const [isLoading, setIsLoading] = useState(false);
+    const [authError, setAuthError] = useState(null);
     const isFirebaseReady = authService.isFirebaseReady();
 
     // Si no está autenticado, el modal actúa como pantalla de bienvenida obligatoria
@@ -18,18 +19,20 @@ export default function AuthModal({
 
     const handleGoogleLogin = async () => {
         setIsLoading(true);
+        setAuthError(null);
         try {
             await authService.loginWithGoogle();
             showToast("🎉 ¡Sesión iniciada con Google exitosamente!", "success");
             if (onClose) onClose();
         } catch (error) {
             console.error("Error al iniciar sesión con Google:", error);
+            setAuthError(error);
             if (error.code === 'auth/popup-closed-by-user') {
                 showToast("Has cerrado la ventana de inicio de sesión de Google.", "warning");
             } else if (error.code === 'auth/configuration-not-found' || error.message?.includes('configuration')) {
-                showToast("⚠️ Proveedor Google no habilitado aún en Firebase Console. Revisa la pestaña Authentication.", "error");
+                showToast("⚠️ Proveedor Google no habilitado en Firebase Console.", "error");
             } else {
-                showToast("No se pudo iniciar sesión con Google. Revisa tu conexión.", "error");
+                showToast("Error de conexión con Google Identity.", "error");
             }
         } finally {
             setIsLoading(false);
@@ -199,7 +202,39 @@ export default function AuthModal({
                             )}
                         </button>
 
-                        <p className="text-3xs text-slate-400 mt-5 leading-tight">
+                        {/* Diagnóstico si surge error con Firebase */}
+                        {authError && (
+                            <div className="mt-3.5 p-3 rounded-2xl bg-amber-50 border border-amber-200 text-left text-xs">
+                                <div className="flex items-center gap-2 text-amber-800 font-bold mb-1">
+                                    <i className="fa-solid fa-triangle-exclamation"></i>
+                                    <span>Paso requerido en Firebase Console:</span>
+                                </div>
+                                <p className="text-3xs text-amber-900 leading-relaxed m-0 mb-2">
+                                    El mensaje <i>"The requested action is invalid"</i> indica que el proveedor <b>Google</b> debe ser activado en tu consola de Firebase:
+                                </p>
+                                <ol className="text-3xs text-amber-950 pl-4 space-y-1 m-0">
+                                    <li>Entra a <b>console.firebase.google.com</b> en tu proyecto.</li>
+                                    <li>Ve a <b>Authentication &gt; Sign-in method &gt; Google</b>.</li>
+                                    <li>Activa <b>Habilitar</b>, selecciona tu <b>correo de asistencia</b> y haz clic en <b>Guardar</b>.</li>
+                                </ol>
+                            </div>
+                        )}
+
+                        <div className="mt-4 pt-3 border-t border-slate-100 flex flex-col items-center">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    authService.loginAsGuest();
+                                    showToast("🚲 Entrando en Modo Explorador", "info");
+                                    if (onClose) onClose();
+                                }}
+                                className="text-xs font-bold text-slate-500 hover:text-emerald-700 bg-transparent border-none cursor-pointer py-1.5 px-3 rounded-lg hover:bg-slate-100 transition-colors"
+                            >
+                                O explorar mapa y bicicleta 3D sin iniciar sesión →
+                            </button>
+                        </div>
+
+                        <p className="text-3xs text-slate-400 mt-4 leading-tight">
                             🔒 Autenticación segura y protegida mediante Google Identity y Firebase.
                         </p>
                     </div>
