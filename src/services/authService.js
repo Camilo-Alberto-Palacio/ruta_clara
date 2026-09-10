@@ -1,20 +1,20 @@
 /**
  * Servicio de Autenticación para Ruta Clara
- * Soporta Firebase Authentication con GoogleAuthProvider y persistencia en localStorage.
- * Incluye modo de demostración y detección automática de configuración en .env.
+ * Integración directa con Firebase Authentication y GoogleAuthProvider.
  */
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { 
     getAuth, 
     GoogleAuthProvider, 
     signInWithPopup, 
+    signInWithRedirect,
+    getRedirectResult,
     signOut as fbSignOut, 
     onAuthStateChanged 
 } from 'firebase/auth';
 
 const STORAGE_KEY = 'ruta_clara_auth_user';
 
-// Lectura de variables de entorno Vite
 const firebaseConfig = {
     apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
     authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -26,7 +26,7 @@ const firebaseConfig = {
 
 const isConfigured = Boolean(
     firebaseConfig.apiKey && 
-    firebaseConfig.apiKey !== 'TU_FIREBASE_API_KEY' &&
+    firebaseConfig.apiKey.startsWith('AIza') &&
     firebaseConfig.projectId
 );
 
@@ -50,8 +50,26 @@ class AuthService {
         this.listeners = new Set();
         this.currentUser = this.loadStoredUser();
 
-        // Si Firebase está activo, sincronizar sesión oficial
         if (auth) {
+            // Manejar retorno de redirección móvil si aplica
+            getRedirectResult(auth).then((result) => {
+                if (result && result.user) {
+                    const fbUser = result.user;
+                    const mappedUser = {
+                        uid: fbUser.uid,
+                        displayName: fbUser.displayName || 'Ciclista Ruta Clara',
+                        email: fbUser.email,
+                        photoURL: fbUser.photoURL || null,
+                        role: 'Ciclista Ciudadano',
+                        provider: 'google'
+                    };
+                    this.setUser(mappedUser);
+                }
+            }).catch((err) => {
+                console.warn("[AuthService] Error en getRedirectResult:", err);
+            });
+
+            // Escuchar cambios de estado en tiempo real
             onAuthStateChanged(auth, (fbUser) => {
                 if (fbUser) {
                     const mappedUser = {
@@ -60,11 +78,10 @@ class AuthService {
                         email: fbUser.email,
                         photoURL: fbUser.photoURL || null,
                         role: 'Ciclista Ciudadano',
-                        provider: 'google',
-                        isDemo: false
+                        provider: 'google'
                     };
                     this.setUser(mappedUser);
-                } else if (this.currentUser && !this.currentUser.isDemo) {
+                } else if (this.currentUser) {
                     this.setUser(null);
                 }
             });
@@ -116,7 +133,7 @@ class AuthService {
     }
 
     /**
-     * Iniciar sesión con Google oficial
+     * Iniciar sesión real con Google
      */
     async loginWithGoogle() {
         if (!this.isFirebaseReady()) {
@@ -132,39 +149,27 @@ class AuthService {
                 email: fbUser.email,
                 photoURL: fbUser.photoURL || null,
                 role: 'Ciclista Ciudadano',
-                provider: 'google',
-                isDemo: false
+                provider: 'google'
             };
             this.setUser(mappedUser);
             return mappedUser;
         } catch (error) {
+            // Si el navegador móvil bloquea el pop-up, intentar redirect automático
+            if (error.code === 'auth/popup-blocked') {
+                console.warn("[AuthService] Popup bloqueado, usando signInWithRedirect...");
+                await signInWithRedirect(auth, googleProvider);
+                return null;
+            }
             console.error("[AuthService] Error en Google Sign-In:", error);
             throw error;
         }
     }
 
     /**
-     * Iniciar sesión en modo Demo para desarrollo o pruebas inmediatas
-     */
-    loginDemoUser(customData = {}) {
-        const demoUser = {
-            uid: `demo_${Date.now()}`,
-            displayName: customData.displayName || 'Camilo Palacios',
-            email: customData.email || 'camilo.palacios@semillero.edu.co',
-            photoURL: customData.photoURL || null,
-            role: 'Ciclista Ciudadano',
-            provider: 'demo',
-            isDemo: true
-        };
-        this.setUser(demoUser);
-        return demoUser;
-    }
-
-    /**
      * Cerrar sesión
      */
     async logout() {
-        if (auth && this.currentUser && !this.currentUser.isDemo) {
+        if (auth && this.currentUser) {
             try {
                 await fbSignOut(auth);
             } catch (e) {

@@ -11,40 +11,29 @@ export default function AuthModal({
     const [isLoading, setIsLoading] = useState(false);
     const isFirebaseReady = authService.isFirebaseReady();
 
-    if (!isOpen) return null;
+    // Si no está autenticado, el modal actúa como pantalla de bienvenida obligatoria
+    const isMandatory = !currentUser;
+
+    if (!isOpen && !isMandatory) return null;
 
     const handleGoogleLogin = async () => {
         setIsLoading(true);
         try {
-            if (isFirebaseReady) {
-                await authService.loginWithGoogle();
-                showToast("🎉 ¡Sesión iniciada con Google exitosamente!", "success");
-                onClose();
-            } else {
-                // Fallback amigable si aún no se han configurado credenciales en .env
-                authService.loginDemoUser({
-                    displayName: 'Camilo Palacios (Google)',
-                    email: 'camilo.palacios@ejemplo.com'
-                });
-                showToast("✨ Conectado en Modo Demostración de Google", "info");
-                onClose();
-            }
+            await authService.loginWithGoogle();
+            showToast("🎉 ¡Sesión iniciada con Google exitosamente!", "success");
+            if (onClose) onClose();
         } catch (error) {
-            console.error("Error al iniciar sesión:", error);
+            console.error("Error al iniciar sesión con Google:", error);
             if (error.code === 'auth/popup-closed-by-user') {
                 showToast("Has cerrado la ventana de inicio de sesión de Google.", "warning");
+            } else if (error.code === 'auth/configuration-not-found' || error.message?.includes('configuration')) {
+                showToast("⚠️ Proveedor Google no habilitado aún en Firebase Console. Revisa la pestaña Authentication.", "error");
             } else {
-                showToast("No se pudo iniciar sesión con Google. Revisa tu conexión o credenciales.", "error");
+                showToast("No se pudo iniciar sesión con Google. Revisa tu conexión.", "error");
             }
         } finally {
             setIsLoading(false);
         }
-    };
-
-    const handleDemoLogin = () => {
-        authService.loginDemoUser();
-        showToast("✨ Has ingresado como Ciclista Ciudadano en modo de prueba", "info");
-        onClose();
     };
 
     const handleLogout = async () => {
@@ -52,7 +41,6 @@ export default function AuthModal({
         try {
             await authService.logout();
             showToast("👋 Has cerrado sesión correctamente", "info");
-            onClose();
         } catch (err) {
             console.error("Error al cerrar sesión:", err);
             showToast("Error cerrando sesión.", "error");
@@ -63,25 +51,29 @@ export default function AuthModal({
 
     return (
         <div 
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-fade-in"
-            onClick={onClose}
+            className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in"
+            onClick={() => {
+                if (!isMandatory && onClose) onClose();
+            }}
         >
             <div 
-                className="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-sm w-full p-6 relative overflow-hidden animate-scale-up"
-                style={{ boxShadow: '0 20px 45px rgba(0, 0, 0, 0.18)' }}
+                className="bg-white rounded-3xl shadow-2xl border border-slate-200/90 max-w-sm w-full p-6 relative overflow-hidden animate-scale-up text-slate-800"
+                style={{ boxShadow: '0 25px 60px rgba(0, 0, 0, 0.25)' }}
                 onClick={(e) => e.stopPropagation()}
             >
-                {/* Botón cerrar modal */}
-                <button
-                    onClick={onClose}
-                    className="absolute top-4 right-4 w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors cursor-pointer border-none"
-                    aria-label="Cerrar modal"
-                >
-                    <i className="fa-solid fa-xmark text-base"></i>
-                </button>
+                {/* Botón cerrar modal solo si ya está autenticado */}
+                {!isMandatory && onClose && (
+                    <button
+                        onClick={onClose}
+                        className="absolute top-4 right-4 w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors cursor-pointer border-none"
+                        aria-label="Cerrar modal"
+                    >
+                        <i className="fa-solid fa-xmark text-base"></i>
+                    </button>
+                )}
 
                 {currentUser ? (
-                    /* --- ESTADO AUTENTICADO (PERFIL DE USUARIO) --- */
+                    /* --- ESTADO AUTENTICADO: PERFIL DE USUARIO --- */
                     <div className="flex flex-col items-center text-center">
                         <div className="relative mb-3 mt-1">
                             {currentUser.photoURL ? (
@@ -97,7 +89,7 @@ export default function AuthModal({
                             )}
                             <div 
                                 className="absolute bottom-0 right-0 w-6 h-6 rounded-full bg-emerald-500 border-2 border-white flex items-center justify-center shadow-xs" 
-                                title="En línea"
+                                title="Cuenta Google Conectada"
                             >
                                 <i className="fa-solid fa-check text-white text-2xs"></i>
                             </div>
@@ -130,7 +122,7 @@ export default function AuthModal({
                                     </div>
                                 </div>
                                 <span className="text-2xs font-extrabold px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600">
-                                    Nivel 1
+                                    Activo
                                 </span>
                             </div>
                             <p className="text-2xs text-slate-400 mt-2 m-0">
@@ -149,35 +141,42 @@ export default function AuthModal({
                         </button>
                     </div>
                 ) : (
-                    /* --- ESTADO NO AUTENTICADO (INICIO DE SESIÓN) --- */
+                    /* --- ESTADO NO AUTENTICADO: INGRESO OBLIGATORIO CON GOOGLE --- */
                     <div className="text-center pt-2">
-                        {/* Logo o Icono de cabecera */}
-                        <div className="w-14 h-14 mx-auto mb-3 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shadow-xs">
-                            <i className="fa-solid fa-user-shield text-2xl"></i>
+                        {/* Logotipo de Ruta Clara */}
+                        <div className="w-16 h-16 mx-auto mb-3 rounded-3xl bg-emerald-50 border border-emerald-200/80 flex items-center justify-center shadow-xs">
+                            <img 
+                                src={`${import.meta.env.BASE_URL}Logo.svg`} 
+                                alt="Ruta Clara Logo" 
+                                className="w-10 h-10"
+                            />
                         </div>
 
-                        <h2 className="text-xl font-black text-slate-900 tracking-tight mb-1">
-                            Bienvenido a <span className="text-emerald-600">Ruta Clara</span>
+                        <h2 className="text-2xl font-black text-slate-900 tracking-tight mb-1">
+                            Ruta <span className="text-emerald-600">Clara</span>
                         </h2>
+                        <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wider mb-2">
+                            Ciclorrutas Seguras de Bogotá
+                        </p>
                         <p className="text-xs text-slate-500 mb-6 leading-relaxed">
-                            Inicia sesión para sincronizar tus reportes viales ciudadanos, acceder a rutas inteligentes seguras y personalizar tu experiencia.
+                            Para acceder al mapa en vivo, planificar tus rutas seguras y reportar incidentes, inicia sesión con tu cuenta de Google.
                         </p>
 
                         {/* Botón Oficial Google Sign-In */}
                         <button
                             onClick={handleGoogleLogin}
                             disabled={isLoading}
-                            className="w-full py-3.5 px-4 rounded-2xl bg-white hover:bg-slate-50 text-slate-700 font-bold text-sm flex items-center justify-center gap-3 transition-all cursor-pointer border border-slate-300 shadow-sm hover:shadow active:scale-98 mb-3"
+                            className="w-full py-3.5 px-4 rounded-2xl bg-white hover:bg-slate-50 text-slate-700 font-extrabold text-sm flex items-center justify-center gap-3 transition-all cursor-pointer border border-slate-300 shadow-sm hover:shadow active:scale-98"
                         >
                             {isLoading ? (
                                 <>
-                                    <i className="fa-solid fa-circle-notch fa-spin text-emerald-600"></i>
+                                    <i className="fa-solid fa-circle-notch fa-spin text-emerald-600 text-base"></i>
                                     <span>Conectando con Google...</span>
                                 </>
                             ) : (
                                 <>
                                     {/* Icono vectorial SVG oficial de Google */}
-                                    <svg className="w-5 h-5" viewBox="0 0 24 24">
+                                    <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
                                         <path
                                             fill="#4285F4"
                                             d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"
@@ -200,20 +199,9 @@ export default function AuthModal({
                             )}
                         </button>
 
-                        {/* Modo Demo si Firebase aún no tiene credenciales en .env */}
-                        {!isFirebaseReady && (
-                            <div className="mt-4 pt-3 border-t border-slate-100 text-center">
-                                <button
-                                    onClick={handleDemoLogin}
-                                    className="text-xs font-bold text-emerald-700 hover:text-emerald-800 underline bg-transparent border-none cursor-pointer py-1"
-                                >
-                                    O ingresar en Modo Demostración (Prueba Local)
-                                </button>
-                                <p className="text-3xs text-slate-400 mt-1 m-0">
-                                    💡 Puedes configurar tus claves reales de Firebase en <code>.env</code> usando la plantilla <code>.env.example</code>.
-                                </p>
-                            </div>
-                        )}
+                        <p className="text-3xs text-slate-400 mt-5 leading-tight">
+                            🔒 Autenticación segura y protegida mediante Google Identity y Firebase.
+                        </p>
                     </div>
                 )}
             </div>

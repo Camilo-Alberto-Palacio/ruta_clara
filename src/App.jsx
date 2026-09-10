@@ -116,9 +116,7 @@ export default function App() {
     // Usability, Toasts, Zen Mode & Onboarding State (Heurística 1, 3, 7, 8, 10)
     const [toasts, setToasts] = useState([]);
     const [isZenMode, setIsZenMode] = useState(false);
-    const [isOnboardingOpen, setIsOnboardingOpen] = useState(() => {
-        return typeof window !== 'undefined' && !localStorage.getItem('rutaclara_onboarding_dismissed');
-    });
+    const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
     const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
 
     const showToast = (message, type = 'info') => {
@@ -202,30 +200,69 @@ export default function App() {
         };
     }, []);
 
-    // Auto-detect user GPS location on start to set as default origin
+    // 4. Ubicación GPS en tiempo real y Brújula de Orientación
+    const [userLocation, setUserLocation] = useState(null);
+    const [userHeading, setUserHeading] = useState(0);
+
+    // Seguimiento satelital GPS continuo y orientación por brújula en tiempo real
     useEffect(() => {
+        const fallback = localidad === 'usme' ? { lat: 4.5317, lng: -74.1166 } : { lat: 4.5631, lng: -74.1128 };
+
         if (!navigator.geolocation) {
-            const fallback = localidad === 'usme' ? { lat: 4.5317, lng: -74.1166 } : { lat: 4.5631, lng: -74.1128 };
+            setUserLocation(fallback);
             setRoutePoints(prev => ({ ...prev, origin: fallback }));
             return;
         }
 
-        navigator.geolocation.getCurrentPosition(
+        const watchId = navigator.geolocation.watchPosition(
             (pos) => {
                 const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
                 setUserLocation(coords);
-                setRoutePoints(prev => ({ ...prev, origin: coords }));
-                setOriginInput('📍 Tu ubicación actual');
+
+                // Auto-asignar como origen por defecto si el usuario no ha digitado una dirección manual
+                setRoutePoints(prev => {
+                    if (!prev.origin || (prev.origin.lat === fallback.lat && prev.origin.lng === fallback.lng)) {
+                        return { ...prev, origin: coords };
+                    }
+                    return prev;
+                });
+
+                // Si el GPS reporta rumbo de movimiento, actualizar orientación de la bicicleta
+                if (pos.coords.heading !== null && pos.coords.heading !== undefined && !isNaN(pos.coords.heading)) {
+                    setUserHeading(pos.coords.heading);
+                }
             },
             (err) => {
-                console.warn("Geolocalización automática por defecto:", err.message);
-                const fallback = localidad === 'usme' ? { lat: 4.5317, lng: -74.1166 } : { lat: 4.5631, lng: -74.1128 };
-                setRoutePoints(prev => ({ ...prev, origin: fallback }));
-                setOriginInput(localidad === 'usme' ? 'Portal Usme' : 'Molinos');
+                console.warn("Seguimiento satelital GPS continuo:", err.message);
+                setUserLocation(prev => prev || fallback);
+                setRoutePoints(prev => ({ ...prev, origin: prev.origin || fallback }));
             },
-            { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
+            { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 }
         );
-    }, []);
+
+        // Brújula digital del dispositivo (DeviceOrientation) para rotar la bicicleta 3D en reposo
+        const handleOrientation = (e) => {
+            if (e.webkitCompassHeading !== undefined) {
+                // Brújula en iOS Safari
+                setUserHeading(e.webkitCompassHeading);
+            } else if (e.alpha !== null && e.alpha !== undefined && !isNaN(e.alpha)) {
+                // Brújula en Android Chrome
+                const compass = (360 - e.alpha) % 360;
+                setUserHeading(compass);
+            }
+        };
+
+        if (window.DeviceOrientationEvent) {
+            window.addEventListener('deviceorientation', handleOrientation, true);
+        }
+
+        return () => {
+            navigator.geolocation.clearWatch(watchId);
+            if (window.DeviceOrientationEvent) {
+                window.removeEventListener('deviceorientation', handleOrientation, true);
+            }
+        };
+    }, [localidad]);
 
     // 3D Navigation Simulator State
     const [isNavigating, setIsNavigating] = useState(false);
@@ -273,8 +310,7 @@ export default function App() {
     const [isSelectingCoords, setIsSelectingCoords] = useState(false);
     const [zoomToCoords, setZoomToCoords] = useState(null);
 
-    // 4. Route Planning State
-    const [userLocation, setUserLocation] = useState(null);
+    // 4. Route Planning State (userLocation & userHeading definidos arriba)
     const [originInput, setOriginInput] = useState('📍 Tu ubicación actual');
     const [destInput, setDestInput] = useState('');
     const [selectingLocationMode, setSelectingLocationMode] = useState(null);
@@ -290,6 +326,13 @@ export default function App() {
     useEffect(() => {
         const unsubscribe = authService.onAuthChange((user) => {
             setCurrentUser(user);
+            if (user) {
+                // Al autenticarse, si aún no ha completado el recorrido de los botones, iniciarlo automáticamente
+                const hasSeenTour = localStorage.getItem('rutaclara_tour_completed');
+                if (!hasSeenTour) {
+                    setIsOnboardingOpen(true);
+                }
+            }
         });
         return () => unsubscribe();
     }, []);
@@ -303,9 +346,9 @@ export default function App() {
 
     const routeManeuversRef = useRef([]);
 
-    // Desktop drawer open/close states
-    const [leftDrawerOpen, setLeftDrawerOpen] = useState(true);
-    const [rightDrawerOpen, setRightDrawerOpen] = useState(true);
+    // Desktop drawer open/close states (inician cerrados para evitar ventanas flotantes invasivas al abrir la app)
+    const [leftDrawerOpen, setLeftDrawerOpen] = useState(false);
+    const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
 
     // Mobile specific UI state
     const [showScientificMenu, setShowScientificMenu] = useState(false);
@@ -2003,6 +2046,8 @@ export default function App() {
             cyclistCoords={cyclistCoords}
             cyclistIndex={cyclistIndex}
             cyclistBearing={cyclistBearing}
+            userLocation={userLocation}
+            userHeading={userHeading}
             activeRoute={activeRoute}
             leftDrawerOpen={leftDrawerOpen}
             rightDrawerOpen={rightDrawerOpen}
@@ -3083,6 +3128,7 @@ export default function App() {
                 onMapLayersChange={setMapLayers}
                 currentUser={currentUser}
                 onOpenAuthModal={() => setIsAuthModalOpen(true)}
+                onOpenTour={() => setIsOnboardingOpen(true)}
             />
 
             {/* Modal de Llegada a Destino */}
@@ -3115,9 +3161,9 @@ export default function App() {
                 }}
             />
 
-            {/* Modal de Autenticación con Google y Perfil de Usuario */}
+            {/* Modal de Autenticación con Google y Perfil de Usuario (Puerta de entrada inicial obligatoria si no está autenticado) */}
             <AuthModal
-                isOpen={isAuthModalOpen}
+                isOpen={!currentUser || isAuthModalOpen}
                 onClose={() => setIsAuthModalOpen(false)}
                 currentUser={currentUser}
                 userReportsCount={citizenReports.filter(r => r.properties?.userId === currentUser?.uid).length}

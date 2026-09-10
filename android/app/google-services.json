@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "492171388413",
+    "project_id": "studio-2980825070-f5e2d",
+    "storage_bucket": "studio-2980825070-f5e2d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:492171388413:android:8df611466616c7eb832594",
+        "android_client_info": {
+          "package_name": "Ruta.Clara"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAlZHatLgORH_YlK3cV8n5UgHosfB9Q_m8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

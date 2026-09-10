@@ -78,6 +78,145 @@ function getLocalityKey(locNombre) {
     return null;
 }
 
+function render3DBicycleHTML(angle, bankAngle = 0, transition = 'transform 0.12s ease-out') {
+    return `
+        <div class="bike-3d-marker-container" style="
+            width: 60px;
+            height: 60px;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            perspective: 500px;
+        ">
+            <!-- 1. Radar Pulse Beacon Ring (Indica GPS activo en tiempo real) -->
+            <div class="bike-radar-pulse" style="
+                position: absolute;
+                width: 52px;
+                height: 52px;
+                border-radius: 50%;
+                background: radial-gradient(circle, rgba(16, 185, 129, 0.4) 0%, rgba(16, 185, 129, 0.08) 65%, transparent 100%);
+                border: 1.5px solid rgba(16, 185, 129, 0.65);
+                animation: bikeBeaconPulse 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+                pointer-events: none;
+            "></div>
+
+            <!-- 2. Rotating & Banking 3D Bicycle Body -->
+            <div class="bike-3d-body" style="
+                width: 50px;
+                height: 50px;
+                position: relative;
+                transform-origin: center center;
+                transform: rotate(${angle}deg) rotateY(${bankAngle}deg);
+                transition: ${transition};
+                will-change: transform;
+                filter: drop-shadow(0 6px 8px rgba(0, 0, 0, 0.45));
+            ">
+                <!-- Forward Headlight Beam (haz de luz proyectado hacia adelante) -->
+                <div style="
+                    position: absolute;
+                    top: -24px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    width: 32px;
+                    height: 36px;
+                    background: linear-gradient(to top, rgba(255, 255, 255, 0.7), rgba(52, 211, 153, 0.25), transparent);
+                    clip-path: polygon(30% 100%, 70% 100%, 100% 0%, 0% 0%);
+                    border-radius: 50% 50% 0 0;
+                    pointer-events: none;
+                    opacity: 0.85;
+                "></div>
+
+                <!-- 3D Realistic Bicycle SVG -->
+                <svg viewBox="0 0 64 64" width="50" height="50" style="overflow: visible; display: block;">
+                    <defs>
+                        <linearGradient id="rcBikeEmeraldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stop-color="#34d399"/>
+                            <stop offset="45%" stop-color="#10b981"/>
+                            <stop offset="85%" stop-color="#059669"/>
+                            <stop offset="100%" stop-color="#064e3b"/>
+                        </linearGradient>
+                        <linearGradient id="rcBikeChromeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" stop-color="#f8fafc"/>
+                            <stop offset="50%" stop-color="#cbd5e1"/>
+                            <stop offset="100%" stop-color="#94a3b8"/>
+                        </linearGradient>
+                        <linearGradient id="rcBikeTireGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" stop-color="#334155"/>
+                            <stop offset="50%" stop-color="#0f172a"/>
+                            <stop offset="100%" stop-color="#1e293b"/>
+                        </linearGradient>
+                        <filter id="rcBikeTubeShadow" x="-20%" y="-20%" width="140%" height="140%">
+                            <feDropShadow dx="1" dy="2" stdDeviation="1" flood-color="#000000" flood-opacity="0.4"/>
+                        </filter>
+                    </defs>
+
+                    <!-- Ground Shadow of the Bicycle (pavement projection) -->
+                    <ellipse cx="33" cy="35" rx="7" ry="24" fill="rgba(15, 23, 42, 0.45)" filter="blur(2px)"/>
+
+                    <!-- REAR WHEEL -->
+                    <g id="rear-wheel">
+                        <ellipse cx="32" cy="50" rx="3.5" ry="10" fill="url(#rcBikeTireGrad)"/>
+                        <ellipse cx="32" cy="50" rx="2" ry="8.5" fill="none" stroke="url(#rcBikeChromeGrad)" stroke-width="1.2"/>
+                        <ellipse cx="32" cy="50" rx="2.5" ry="3" fill="#10b981"/>
+                        <circle cx="32" cy="50" r="1.5" fill="#f8fafc"/>
+                    </g>
+
+                    <!-- REAR TRIANGLE / CHAINSTAY & SEATSTAY -->
+                    <path d="M32 50 L30 36 L32 32 L34 36 Z" fill="url(#rcBikeEmeraldGrad)" filter="url(#rcBikeTubeShadow)"/>
+
+                    <!-- BOTTOM BRACKET & PEDAL CRANK -->
+                    <g id="pedals">
+                        <line x1="32" y1="36" x2="23" y2="38" stroke="url(#rcBikeChromeGrad)" stroke-width="2.2" stroke-linecap="round"/>
+                        <rect x="20" y="36.5" width="4" height="3" rx="1" fill="#0f172a" stroke="#10b981" stroke-width="0.7"/>
+                        <line x1="32" y1="36" x2="41" y2="34" stroke="url(#rcBikeChromeGrad)" stroke-width="2.2" stroke-linecap="round"/>
+                        <rect x="40" y="32.5" width="4" height="3" rx="1" fill="#0f172a" stroke="#10b981" stroke-width="0.7"/>
+                        <circle cx="32" cy="36" r="3.2" fill="#0f172a" stroke="#cbd5e1" stroke-width="1"/>
+                    </g>
+
+                    <!-- MAIN FRAME TUBES -->
+                    <path d="M32 20 L30.5 35 L33.5 35 Z" fill="url(#rcBikeEmeraldGrad)" filter="url(#rcBikeTubeShadow)"/>
+                    <path d="M32 20 L31 32 L33 32 Z" fill="#34d399"/>
+                    <path d="M32 20 L32 32" stroke="url(#rcBikeEmeraldGrad)" stroke-width="3" stroke-linecap="round"/>
+                    <line x1="31.2" y1="20" x2="31.2" y2="34" stroke="#ffffff" stroke-width="0.8" opacity="0.75"/>
+
+                    <!-- SADDLE -->
+                    <g id="saddle">
+                        <path d="M32 30 C30 32, 28 35, 29 38 C30 39, 34 39, 35 38 C36 35, 34 32, 32 30 Z" fill="#0f172a" filter="url(#rcBikeTubeShadow)"/>
+                        <ellipse cx="32" cy="35" rx="0.8" ry="3" fill="#334155"/>
+                        <path d="M29.5 38 Q32 39.5 34.5 38" fill="none" stroke="#10b981" stroke-width="0.9"/>
+                    </g>
+
+                    <!-- FRONT FORK & HEAD TUBE -->
+                    <path d="M30.5 20 L31 14 L33 14 L33.5 20 Z" fill="url(#rcBikeEmeraldGrad)"/>
+
+                    <!-- FRONT WHEEL -->
+                    <g id="front-wheel">
+                        <ellipse cx="32" cy="14" rx="3.5" ry="10" fill="url(#rcBikeTireGrad)"/>
+                        <ellipse cx="32" cy="14" rx="2" ry="8.5" fill="none" stroke="url(#rcBikeChromeGrad)" stroke-width="1.2"/>
+                        <ellipse cx="32" cy="14" rx="2.5" ry="3" fill="#10b981"/>
+                        <circle cx="32" cy="14" r="1.5" fill="#f8fafc"/>
+                    </g>
+
+                    <!-- HANDLEBARS & STEM -->
+                    <g id="handlebars">
+                        <rect x="31" y="18" width="2" height="4" rx="1" fill="url(#rcBikeChromeGrad)"/>
+                        <path d="M21 21 C24 19, 28 19.5, 32 19.5 C36 19.5, 40 19, 43 21" fill="none" stroke="url(#rcBikeChromeGrad)" stroke-width="2.6" stroke-linecap="round"/>
+                        <rect x="19.5" y="20" width="3.5" height="3" rx="1.5" fill="#10b981" stroke="#064e3b" stroke-width="0.6"/>
+                        <rect x="41" y="20" width="3.5" height="3" rx="1.5" fill="#10b981" stroke="#064e3b" stroke-width="0.6"/>
+                        <circle cx="32" cy="17.5" r="2.2" fill="#ffffff" stroke="#34d399" stroke-width="1"/>
+                        <circle cx="32" cy="17.5" r="1" fill="#ecfdf5"/>
+                    </g>
+
+                    <!-- RUTA CLARA EMERALD COCKPIT PUCK -->
+                    <circle cx="32" cy="27" r="4.5" fill="#10b981" stroke="#ffffff" stroke-width="1.5" filter="url(#rcBikeTubeShadow)"/>
+                    <path d="M32 24.5 L34.5 28.5 L32 27.5 L29.5 28.5 Z" fill="#ffffff"/>
+                </svg>
+            </div>
+        </div>
+    `;
+}
+
 export default function MapComponent({
     mapStyle = 'light',
     navigationMode = 'simulated',
@@ -113,7 +252,9 @@ export default function MapComponent({
     isMobile = false,
     isBottomSheetExpanded = false,
     isCameraLocked = true,
-    onCameraLockChange
+    onCameraLockChange,
+    userLocation = null,
+    userHeading = 0
 }) {
     // Derive the active route's coordinates for proximity filtering
     const activeRouteCoords = activeRoute ? activeRoute.coordinates : null;
@@ -170,6 +311,15 @@ export default function MapComponent({
 
     // Track map zoom level to control marker density
     const [currentZoom, setCurrentZoom] = useState(13);
+    const hasInitialCenteredRef = useRef(false);
+
+    // Centrar automáticamente la cámara en la ubicación real del usuario al recibir la primera coordenada GPS
+    useEffect(() => {
+        if (userLocation && !hasInitialCenteredRef.current && mapRef.current) {
+            mapRef.current.setView([userLocation.lat, userLocation.lng], 16);
+            hasInitialCenteredRef.current = true;
+        }
+    }, [userLocation]);
 
     // 1. Initial Mount: Initialize Leaflet Map and Fetch GeoJSON Boundaries
     useEffect(() => {
@@ -177,11 +327,15 @@ export default function MapComponent({
 
         let active = true;
 
-        // Center initially in Usme
+        // Center on real user GPS if available, otherwise Usme fallback
+        const initialCenter = userLocation ? [userLocation.lat, userLocation.lng] : [4.506, -74.115];
+        const initialZoom = userLocation ? 16 : 13;
+        if (userLocation) hasInitialCenteredRef.current = true;
+
         const map = L.map(mapContainerRef.current, {
             zoomControl: false,
             attributionControl: true
-        }).setView([4.506, -74.115], 13);
+        }).setView(initialCenter, initialZoom);
 
         // Add custom zoom control in the bottom-right corner
         L.control.zoom({ position: 'bottomright' }).addTo(map);
@@ -1476,9 +1630,12 @@ export default function MapComponent({
         map.boxZoom.enable();
         map.keyboard.enable();
 
-        if (!isNavigating || !cyclistCoords) {
+        // Target coordinates: Active navigation coordinates OR idle real-time user GPS location
+        const currentPos = (isNavigating && cyclistCoords) ? cyclistCoords : userLocation;
+
+        if (!currentPos) {
             continuousBearingRef.current = null;
-            // Remove cyclist marker when not navigating
+            // Remove cyclist marker when no GPS location or route position
             if (cyclistMarkerRef.current) {
                 map.removeLayer(cyclistMarkerRef.current);
                 cyclistMarkerRef.current = null;
@@ -1487,8 +1644,9 @@ export default function MapComponent({
         }
 
         // Calculate continuous bearing (shortest angular delta) to prevent 360° flip spins
-        const targetBearing = (cyclistBearing !== null && cyclistBearing !== undefined && !isNaN(cyclistBearing)) 
-            ? cyclistBearing 
+        const rawBearing = isNavigating ? cyclistBearing : userHeading;
+        const targetBearing = (rawBearing !== null && rawBearing !== undefined && !isNaN(rawBearing)) 
+            ? rawBearing 
             : 0;
 
         if (continuousBearingRef.current === null || isNaN(continuousBearingRef.current)) {
@@ -1500,90 +1658,54 @@ export default function MapComponent({
         const newAngle = currentAngle + diff;
         continuousBearingRef.current = newAngle;
 
+        // Dynamic turn banking angle (tilts the 3D bicycle into the curve, max 12 degrees)
+        const bankAngle = Math.max(-12, Math.min(12, Math.round(diff * 0.35)));
+
         // Dynamic transition duration: rapid linear at 5x to avoid interrupted CSS transitions
         const arrowTransition = navSpeedMultiplier >= 5 
             ? 'transform 0.05s linear' 
             : (navSpeedMultiplier === 2 ? 'transform 0.08s ease-out' : 'transform 0.12s ease-out');
 
-        // If marker already exists, smoothly update position and rotate arrow along shortest arc
+        // If marker already exists, smoothly update position and rotate 3D bicycle along shortest arc
         if (cyclistMarkerRef.current) {
-            cyclistMarkerRef.current.setLatLng(cyclistCoords);
+            cyclistMarkerRef.current.setLatLng(currentPos);
             const el = cyclistMarkerRef.current.getElement();
             if (el) {
-                const arrowEl = el.querySelector('.waze-arrow-icon');
-                if (arrowEl) {
-                    arrowEl.style.transition = arrowTransition;
-                    arrowEl.style.transform = `rotate(${newAngle}deg)`;
+                const bodyEl = el.querySelector('.bike-3d-body');
+                if (bodyEl) {
+                    bodyEl.style.transition = arrowTransition;
+                    bodyEl.style.transform = `rotate(${newAngle}deg) rotateY(${bankAngle}deg)`;
                 }
             }
         } else {
             continuousBearingRef.current = targetBearing;
-            // Emerald Green Navigation Cursor (Ruta Clara Palette)
+            // 3D Isometric Bicycle Marker (Ruta Clara Metallic Emerald)
             const cyclistIcon = L.divIcon({
-                className: 'waze-vehicle-puck-wrapper',
-                html: `
-                    <div style="
-                        width: 48px;
-                        height: 48px;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        position: relative;
-                    ">
-                        <!-- Pulse glow halo under vehicle -->
-                        <div style="
-                            position: absolute;
-                            width: 44px;
-                            height: 44px;
-                            background: rgba(16, 185, 129, 0.4);
-                            border-radius: 50%;
-                            filter: blur(5px);
-                        "></div>
-                        <!-- Emerald Green Navigation Cursor -->
-                        <div style="
-                            position: relative;
-                            width: 38px;
-                            height: 38px;
-                            background: linear-gradient(135deg, #10b981, #059669);
-                            border: 3.5px solid #ffffff;
-                            border-radius: 50%;
-                            display: flex;
-                            align-items: center;
-                            justify-content: center;
-                            box-shadow: 0 6px 18px rgba(16, 185, 129, 0.8), 0 2px 6px rgba(0,0,0,0.35);
-                        ">
-                            <div class="waze-arrow-icon" style="
-                                display: flex;
-                                align-items: center;
-                                justify-content: center;
-                                transform: rotate(${newAngle}deg);
-                                transition: ${arrowTransition};
-                                will-change: transform;
-                            ">
-                                <svg viewBox="0 0 24 24" width="22" height="22" style="fill: #ffffff; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5)); transform: translateY(-1px);">
-                                    <path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z"/>
-                                </svg>
-                            </div>
-                        </div>
-                    </div>
-                `,
-                iconSize: [48, 48],
-                iconAnchor: [24, 24]
+                className: 'ruta-clara-3d-bike-marker',
+                html: render3DBicycleHTML(newAngle, bankAngle, arrowTransition),
+                iconSize: [60, 60],
+                iconAnchor: [30, 30]
             });
 
-            const cyclistMarker = L.marker(cyclistCoords, { 
+            const cyclistMarker = L.marker(currentPos, { 
                 icon: cyclistIcon, 
                 zIndexOffset: 3000 
             }).addTo(map);
 
+            cyclistMarker.bindTooltip('<strong>🚴 Tu Ubicación</strong> (GPS en vivo)', { 
+                direction: 'top', 
+                offset: [0, -22],
+                className: 'custom-tooltip' 
+            });
+
             cyclistMarkerRef.current = cyclistMarker;
-            if (isCameraLocked) {
-                map.setView(cyclistCoords, 17);
+            if (isNavigating && isCameraLocked) {
+                map.setView(currentPos, 17);
             }
         }
 
-        // Camera follow ONLY if user has NOT panned away
-        if (isCameraLocked) {
+        // Camera follow ONLY during active navigation if user has NOT panned away
+        if (isNavigating && isCameraLocked && cyclistCoords) {
             const currentCenter = map.getCenter();
             const distMeters = currentCenter ? currentCenter.distanceTo(cyclistCoords) : 0;
 
@@ -1592,18 +1714,17 @@ export default function MapComponent({
                 map.setView(cyclistCoords, map.getZoom());
             } else if (navSpeedMultiplier >= 5) {
                 // At 5x high speed, lock camera synchronously to marker frame
-                // This eliminates Leaflet animation cancel latency and stops all camera/marker jitter
                 map.panTo(cyclistCoords, { animate: false });
             } else {
                 const panDuration = navSpeedMultiplier === 2 ? 0.06 : 0.12;
                 map.panTo(cyclistCoords, { 
-                    animate: true,
-                    duration: panDuration,
-                    easeLinearity: 0.5
+                    animate: true, 
+                    duration: panDuration, 
+                    easeLinearity: 0.5 
                 });
             }
         }
-    }, [isNavigating, cyclistCoords, cyclistBearing, isCameraLocked, navSpeedMultiplier]);
+    }, [isNavigating, cyclistCoords, cyclistBearing, userLocation, userHeading, isCameraLocked, navSpeedMultiplier]);
 
     // 9. Zoom to specific coordinates when requested (e.g. from citizen reports panel)
     useEffect(() => {
@@ -1623,6 +1744,27 @@ export default function MapComponent({
                     <i className="fa-solid fa-route"></i>
                     <span>Vista enfocada en la ruta • Solo elementos en el corredor</span>
                 </div>
+            )}
+
+            {/* Floating "Mi Ubicación GPS" Button (Recentrado instantáneo 1-toque) */}
+            {userLocation && (
+                <button
+                    type="button"
+                    onClick={() => {
+                        if (mapRef.current && userLocation) {
+                            mapRef.current.flyTo([userLocation.lat, userLocation.lng], 17, { duration: 0.8 });
+                            if (callbacksRef.current.onCameraLockChange) {
+                                callbacksRef.current.onCameraLockChange(true);
+                            }
+                        }
+                    }}
+                    className="floating-my-location-btn"
+                    title="Centrar en mi ubicación GPS"
+                    aria-label="Centrar en mi ubicación GPS"
+                    id="btn-my-location"
+                >
+                    <i className="fa-solid fa-location-crosshairs text-emerald-600 text-lg"></i>
+                </button>
             )}
 
             {/* Map Legend Overlay – hidden when a route is active to maximize map space */}

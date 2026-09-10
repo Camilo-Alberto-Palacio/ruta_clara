@@ -13,7 +13,8 @@ export default function MapSettingsModal({
     mapLayers,
     onMapLayersChange,
     currentUser = null,
-    onOpenAuthModal = () => {}
+    onOpenAuthModal = () => {},
+    onOpenTour = () => {}
 }) {
     if (!isOpen) return null;
 
@@ -113,6 +114,29 @@ export default function MapSettingsModal({
                             {currentUser ? 'Ver Perfil' : 'Ingresar'}
                         </button>
                     </div>
+
+                    {/* Botón para ver el recorrido interactivo de botones */}
+                    {onOpenTour && (
+                        <button
+                            type="button"
+                            onClick={() => {
+                                onClose();
+                                onOpenTour();
+                            }}
+                            className="p-3 rounded-2xl bg-emerald-50/90 hover:bg-emerald-100/90 border border-emerald-300 text-emerald-800 flex items-center justify-between cursor-pointer transition-all active:scale-98"
+                        >
+                            <div className="flex items-center gap-2.5">
+                                <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center text-xs shadow-xs">
+                                    <i className="fa-solid fa-graduation-cap"></i>
+                                </div>
+                                <div className="text-left">
+                                    <span className="text-xs font-black block leading-tight">Guía de Botones de la App</span>
+                                    <span className="text-3xs text-emerald-700 font-medium">Aprende qué hace cada botón en 1 minuto</span>
+                                </div>
+                            </div>
+                            <i className="fa-solid fa-chevron-right text-xs text-emerald-600"></i>
+                        </button>
+                    )}
 
                     {/* 1. Estilo Visual del Mapa */}
                     <div>

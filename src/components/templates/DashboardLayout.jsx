@@ -11,9 +11,9 @@ export default function DashboardLayout({
     viewMode,
     citizenSciencePanel
 }) {
-    // Drawer open/close states for desktop
-    const [leftDrawerOpen, setLeftDrawerOpen] = useState(true);
-    const [rightDrawerOpen, setRightDrawerOpen] = useState(true);
+    // Drawer open/close states for desktop (defaults to closed for a clean map view on launch)
+    const [leftDrawerOpen, setLeftDrawerOpen] = useState(false);
+    const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
 
     // Mobile tabs state: 'map', 'simulator', 'results'
     const [activeMobileTab, setActiveMobileTab] = useState('map');

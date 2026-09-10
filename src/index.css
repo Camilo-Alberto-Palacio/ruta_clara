@@ -1210,6 +1210,65 @@ input:checked+.slider-round:before {
     position: relative;
 }
 
+/* 3D Bicycle Marker & Radar Pulse Animation */
+@keyframes bikeBeaconPulse {
+    0% {
+        transform: scale(0.6);
+        opacity: 0.85;
+    }
+    50% {
+        opacity: 0.4;
+    }
+    100% {
+        transform: scale(1.6);
+        opacity: 0;
+    }
+}
+
+.ruta-clara-3d-bike-marker {
+    background: transparent !important;
+    border: none !important;
+}
+
+/* Floating "Mi Ubicación GPS" Button */
+.floating-my-location-btn {
+    position: absolute;
+    bottom: 9.5rem;
+    right: 1rem;
+    z-index: 800;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: #ffffff;
+    color: #10b981;
+    border: 2px solid #e2e8f0;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15), 0 1px 3px rgba(0, 0, 0, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.floating-my-location-btn:hover {
+    background: #f0fdf4;
+    color: #059669;
+    border-color: #10b981;
+    transform: scale(1.08);
+    box-shadow: 0 6px 20px rgba(16, 185, 129, 0.3);
+}
+
+.floating-my-location-btn:active {
+    transform: scale(0.92);
+}
+
+@media (min-width: 900px) {
+    .floating-my-location-btn {
+        bottom: 5.5rem;
+        right: 1.5rem;
+    }
+}
+
 .map-legend {
     position: absolute;
     bottom: 2rem;
