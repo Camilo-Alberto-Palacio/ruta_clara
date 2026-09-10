@@ -11,7 +11,9 @@ export default function MapSettingsModal({
     mapStyle,
     onMapStyleChange,
     mapLayers,
-    onMapLayersChange
+    onMapLayersChange,
+    currentUser = null,
+    onOpenAuthModal = () => {}
 }) {
     if (!isOpen) return null;
 
@@ -71,6 +73,47 @@ export default function MapSettingsModal({
 
                 {/* Scrollable Settings Body */}
                 <div className="p-5 overflow-y-auto flex flex-col gap-4">
+                    {/* Tarjeta de Cuenta y Perfil Ciudadano */}
+                    <div className="p-3.5 rounded-2xl bg-emerald-50/70 border border-emerald-200/90 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            {currentUser ? (
+                                currentUser.photoURL ? (
+                                    <img 
+                                        src={currentUser.photoURL} 
+                                        alt={currentUser.displayName} 
+                                        className="w-10 h-10 rounded-full object-cover border-2 border-emerald-500 shadow-2xs" 
+                                    />
+                                ) : (
+                                    <div className="w-10 h-10 rounded-full bg-emerald-600 text-white font-black text-sm flex items-center justify-center shadow-2xs">
+                                        {(currentUser.displayName || 'U').charAt(0).toUpperCase()}
+                                    </div>
+                                )
+                            ) : (
+                                <div className="w-10 h-10 rounded-full bg-white text-emerald-600 border border-emerald-200 flex items-center justify-center shadow-2xs">
+                                    <i className="fa-brands fa-google text-base"></i>
+                                </div>
+                            )}
+                            <div>
+                                <h4 className="text-xs font-black text-slate-900 m-0">
+                                    {currentUser ? currentUser.displayName : 'Cuenta y Perfil Ciudadano'}
+                                </h4>
+                                <p className="text-2xs text-slate-500 m-0">
+                                    {currentUser ? currentUser.email : 'Inicia sesión con Google para sincronizar'}
+                                </p>
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                onClose();
+                                onOpenAuthModal();
+                            }}
+                            className="px-3 py-1.5 rounded-xl bg-white hover:bg-emerald-100 text-emerald-700 font-extrabold text-xs border border-emerald-300 shadow-2xs cursor-pointer transition-colors"
+                        >
+                            {currentUser ? 'Ver Perfil' : 'Ingresar'}
+                        </button>
+                    </div>
+
                     {/* 1. Estilo Visual del Mapa */}
                     <div>
                         <span className="text-2xs font-extrabold text-slate-400 uppercase tracking-wider block mb-2">

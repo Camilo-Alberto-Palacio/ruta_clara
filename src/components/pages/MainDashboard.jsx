@@ -370,17 +370,29 @@ export default function MainDashboard() {
         return null;
     };
 
-    // 12. OSRM Routing Fetcher
+    // 12. OSRM Routing Fetcher (Prioriza ciclorrutas y vías aptas para bicicleta)
     const fetchOSRMAlternatives = async (origin, dest) => {
-        const url = `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${dest.lng},${dest.lat}?overview=full&geometries=geojson&alternatives=true`;
+        const bikeUrl = `https://router.project-osrm.org/route/v1/bicycle/${origin.lng},${origin.lat};${dest.lng},${dest.lat}?overview=full&geometries=geojson&alternatives=true`;
+        const drivingUrl = `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${dest.lng},${dest.lat}?overview=full&geometries=geojson&alternatives=true`;
+        
         try {
-            const response = await fetch(url);
-            const data = await response.json();
-            if (data && data.code === 'Ok') {
-                return data.routes;
+            const bikeRes = await fetch(bikeUrl);
+            const bikeData = await bikeRes.json();
+            if (bikeData && bikeData.code === 'Ok' && bikeData.routes && bikeData.routes.length > 0) {
+                return bikeData.routes;
+            }
+        } catch (err) {
+            console.warn("[OSRM] Fallo en perfil bicycle, usando driving como fallback:", err.message);
+        }
+
+        try {
+            const driveRes = await fetch(drivingUrl);
+            const driveData = await driveRes.json();
+            if (driveData && driveData.code === 'Ok' && driveData.routes) {
+                return driveData.routes;
             }
         } catch (error) {
-            console.error("OSRM routing service failed:", error);
+            console.error("[OSRM] Fallo completo en servicio de enrutamiento:", error);
         }
         return [];
     };

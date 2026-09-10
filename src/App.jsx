@@ -48,6 +48,8 @@ import PotholeReportModal from './components/molecules/PotholeReportModal';
 import HazardProximityPill from './components/molecules/HazardProximityPill';
 import MapSettingsModal from './components/molecules/MapSettingsModal';
 import VoiceSearchModal from './components/molecules/VoiceSearchModal';
+import AuthModal from './components/molecules/AuthModal';
+import { authService } from './services/authService';
 import { HAZARD_TYPES, loadActiveUserReports, saveUserReport, createQuickHazardFeature, syncReport } from './utils/quickReportService';
 import { emitToast } from './utils/toastService';
 import { 
@@ -281,6 +283,26 @@ export default function App() {
     const [activeRouteId, setActiveRouteId] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
 
+    // Autenticación con Google y Perfil Ciudadano
+    const [currentUser, setCurrentUser] = useState(() => authService.getCurrentUser());
+    const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+
+    useEffect(() => {
+        const unsubscribe = authService.onAuthChange((user) => {
+            setCurrentUser(user);
+        });
+        return () => unsubscribe();
+    }, []);
+
+    // Referencias sincronizadas para estabilización continua del GPS Watcher sin reinicios destructivos
+    const generatedRoutesRef = useRef(generatedRoutes);
+    generatedRoutesRef.current = generatedRoutes;
+
+    const activeRouteIdRef = useRef(activeRouteId);
+    activeRouteIdRef.current = activeRouteId;
+
+    const routeManeuversRef = useRef([]);
+
     // Desktop drawer open/close states
     const [leftDrawerOpen, setLeftDrawerOpen] = useState(true);
     const [rightDrawerOpen, setRightDrawerOpen] = useState(true);
@@ -435,6 +457,7 @@ export default function App() {
         if (!activeRoute || !activeRoute.coordinates || activeRoute.coordinates.length < 2) return [];
         return generateRouteManeuvers(activeRoute.coordinates);
     }, [activeRouteId, generatedRoutes]);
+    routeManeuversRef.current = routeManeuvers;
 
     // Precalculate dense interpolated points (~6m apart) ONCE when active route changes
     const denseCoords = useMemo(() => {
@@ -503,17 +526,29 @@ export default function App() {
     const caiPointsRef = useRef(caiPoints);
     caiPointsRef.current = caiPoints;
 
-    // 11b. OSRM Routing Fetcher
+    // 11b. OSRM Routing Fetcher (Prioriza ciclorrutas y vías permitidas para bicicletas)
     const fetchOSRMAlternatives = async (origin, dest) => {
-        const url = `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${dest.lng},${dest.lat}?overview=full&geometries=geojson&alternatives=true`;
+        const bikeUrl = `https://router.project-osrm.org/route/v1/bicycle/${origin.lng},${origin.lat};${dest.lng},${dest.lat}?overview=full&geometries=geojson&alternatives=true`;
+        const drivingUrl = `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${dest.lng},${dest.lat}?overview=full&geometries=geojson&alternatives=true`;
+        
         try {
-            const response = await fetch(url);
-            const data = await response.json();
-            if (data && data.code === 'Ok') {
-                return data.routes;
+            const bikeRes = await fetch(bikeUrl);
+            const bikeData = await bikeRes.json();
+            if (bikeData && bikeData.code === 'Ok' && bikeData.routes && bikeData.routes.length > 0) {
+                return bikeData.routes;
+            }
+        } catch (err) {
+            console.warn("[OSRM] Fallo en perfil bicycle, usando driving como fallback:", err.message);
+        }
+
+        try {
+            const driveRes = await fetch(drivingUrl);
+            const driveData = await driveRes.json();
+            if (driveData && driveData.code === 'Ok' && driveData.routes) {
+                return driveData.routes;
             }
         } catch (error) {
-            console.error("OSRM routing service failed:", error);
+            console.error("[OSRM] Fallo completo en servicio de enrutamiento:", error);
         }
         return [];
     };
@@ -912,7 +947,7 @@ export default function App() {
         return () => clearInterval(interval);
     }, [navStatus, navigationMode, navSpeedMultiplier, denseCoords]);
 
-    // D2. Real-time GPS Navigation watcher
+    // D2. Real-time GPS Navigation watcher (Estabilizado con persistencia continua y forward-progress)
     useEffect(() => {
         if (navStatus !== 'running' || navigationMode !== 'gps') return;
 
@@ -922,14 +957,14 @@ export default function App() {
             return;
         }
 
-        const activeRoute = generatedRoutes.find(r => r.id === activeRouteId);
-        if (!activeRoute) return;
-
         const handleSuccess = (position) => {
+            const activeRoute = generatedRoutesRef.current.find(r => r.id === activeRouteIdRef.current);
+            if (!activeRoute || !activeRoute.coordinates || activeRoute.coordinates.length < 2) return;
+
             const { latitude, longitude, accuracy, heading, speed } = position.coords;
 
-            // 1. Accuracy Filter (Noise Gate): Descartar lecturas con error > 35m
-            if (accuracy && accuracy > 35) {
+            // 1. Accuracy Filter (Noise Gate): Descartar solo lecturas con error grosero > 48m
+            if (accuracy && accuracy > 48) {
                 console.warn(`[GPS] Lectura descartada por baja precisión: ±${Math.round(accuracy)}m`);
                 return;
             }
@@ -938,13 +973,13 @@ export default function App() {
             const now = Date.now();
             const dtSeconds = lastGpsTimeRef.current ? (now - lastGpsTimeRef.current) / 1000 : 1;
 
-            // 2. Filtro de saltos físicos / teletransporte (> 50 km/h)
-            const smoothedPt = smoothGpsCoordinate(lastRawGpsCoordRef.current, rawPt, dtSeconds, 50);
+            // 2. Filtro de saltos físicos con suavizado exponencial adaptativo
+            const smoothedPt = smoothGpsCoordinate(lastRawGpsCoordRef.current, rawPt, dtSeconds, 45, accuracy);
             lastRawGpsCoordRef.current = smoothedPt;
             lastGpsTimeRef.current = now;
 
-            // 3. Suavizado visual GPS: snapToSegment proyecta el marcador sobre la ciclorruta si dist <= 22m
-            const snappedPt = snapToSegment(smoothedPt, activeRoute.coordinates, 22);
+            // 3. Suavizado visual GPS con ventana progresiva sobre la ciclorruta
+            const snappedPt = snapToSegment(smoothedPt, activeRoute.coordinates, 32, cyclistIndexRef.current);
             setCyclistCoords(snappedPt);
 
             // 4. Update heading/bearing for vehicle puck (evitar giros erráticos detenido)
@@ -952,7 +987,7 @@ export default function App() {
                 setCyclistBearing(Math.round(heading));
             } else if (lastGpsCoordRef.current) {
                 const movedDist = calculateDistanceMeters(lastGpsCoordRef.current, snappedPt);
-                if (movedDist >= 3.5) {
+                if (movedDist >= 3.0) {
                     const calculatedBrng = calculateBearing(lastGpsCoordRef.current, snappedPt);
                     setCyclistBearing(calculatedBrng);
                 }
@@ -974,7 +1009,6 @@ export default function App() {
             }
 
             // --- 5. ARRIVAL DETECTION ---
-            // If within 40m, or passed destination (reached <= 45m and now distance starts increasing)
             const hasReachedDest = distToDest <= 40;
             const hasPassedDest = minDistToDestRef.current <= 45 && (distToDest >= minDistToDestRef.current + 8) && distToDest <= 70;
 
@@ -991,8 +1025,8 @@ export default function App() {
                 return;
             }
 
-            // --- 6. OFF-ROUTE & PROGRESS EVALUATION ---
-            const routeDistInfo = calculateDistanceToRoute(smoothedPt, activeRoute.coordinates);
+            // --- 6. OFF-ROUTE & PROGRESS EVALUATION CON VENTANA DE AVANCE ---
+            const routeDistInfo = calculateDistanceToRoute(smoothedPt, activeRoute.coordinates, cyclistIndexRef.current, 25);
             const distToRoute = routeDistInfo.minDistanceMeters;
             const closestIdx = routeDistInfo.closestCoordIndex;
 
@@ -1000,12 +1034,12 @@ export default function App() {
             cyclistIndexRef.current = closestIdx;
 
             // Filtro robusto anti-jitter para recálculo dinámico:
-            // - Distancia a la ruta > 35m (no 25m)
-            // - Precisión de GPS aceptable (accuracy <= 25m) para asegurar que el ciclista realmente cambió de vía
-            // - Sostenido de forma continua durante al menos 5 segundos reales
-            // - Cooldown de 12 segundos tras un recálculo
-            const isFarFromRoute = distToDest > 40 && distToRoute > 35;
-            const hasGoodAccuracy = !accuracy || accuracy <= 25;
+            // - Distancia a la ruta > 48m para tolerar ciclorrutas paralelas y andenes
+            // - Precisión de GPS aceptable (accuracy <= 32m)
+            // - Sostenido de forma continua durante al menos 6 segundos
+            // - Cooldown de 15 segundos tras un recálculo para permitir estabilización
+            const isFarFromRoute = distToDest > 45 && distToRoute > 48;
+            const hasGoodAccuracy = !accuracy || accuracy <= 32;
             const timeSinceLastReroute = now - lastRerouteTimeRef.current;
 
             if (isFarFromRoute && hasGoodAccuracy) {
@@ -1013,7 +1047,7 @@ export default function App() {
                     offRouteStartTimeRef.current = now;
                 }
                 const offRouteDuration = now - offRouteStartTimeRef.current;
-                if (offRouteDuration >= 5000 && timeSinceLastReroute >= 12000) {
+                if (offRouteDuration >= 6000 && timeSinceLastReroute >= 15000) {
                     offRouteStartTimeRef.current = null;
                     lastRerouteTimeRef.current = now;
                     handleDynamicReroute(smoothedPt, destPt);
@@ -1023,10 +1057,11 @@ export default function App() {
                 offRouteStartTimeRef.current = null;
             }
 
-            // --- 3. TURN-BY-TURN VOICE GUIDANCE IN GPS MODE ---
-            if (routeManeuvers && routeManeuvers.length > 0) {
-                const upcoming = getUpcomingManeuver(currentPt, routeManeuvers, closestIdx);
-                if (upcoming && upcoming.maneuver.type !== 'destination') {
+            // --- 7. TURN-BY-TURN VOICE GUIDANCE EN MODO GPS (Usa snappedPt) ---
+            const currentManeuvers = routeManeuversRef.current;
+            if (currentManeuvers && currentManeuvers.length > 0) {
+                const upcoming = getUpcomingManeuver(snappedPt, currentManeuvers, closestIdx);
+                if (upcoming && upcoming.maneuver && upcoming.maneuver.type !== 'destination') {
                     const { maneuver, distanceMeters } = upcoming;
                     if (distanceMeters <= 160 && distanceMeters >= 110 && !maneuver.announced150) {
                         maneuver.announced150 = true;
@@ -1044,15 +1079,20 @@ export default function App() {
                 }
             }
 
-            // Dynamic recommendations based on current coordinate
+            // Recomendaciones y evaluación de riesgo con datos en tiempo real
+            const currentSegments = segmentsRef.current || segments;
+            const currentSimState = simulationStateRef.current || simulationState;
+            const currentConstZones = constructionZonesRef.current || constructionZones;
+            const currentReports = citizenReportsRef.current || citizenReports;
+
             const riskInfo = evaluateCoordinateRisk(
                 latitude, 
                 longitude, 
-                segments, 
-                simulationState, 
-                constructionZones, 
-                simulationState.showConstruction,
-                citizenReports
+                currentSegments, 
+                currentSimState, 
+                currentConstZones, 
+                currentSimState?.showConstruction,
+                currentReports
             );
 
             const currentRisk = riskInfo.level;
@@ -1066,27 +1106,27 @@ export default function App() {
             lastRiskLevelRef.current = currentRisk;
 
             // POI safety alerts in real-time GPS mode
-            const nearbyRobbery = robberyReportsRef.current.find(r => {
+            const nearbyRobbery = robberyReportsRef.current?.find(r => {
                 const distDeg = Math.sqrt(Math.pow(latitude - r.lat, 2) + Math.pow(longitude - r.lng, 2));
                 return (distDeg * 111000) <= 100;
             });
 
-            const nearbyAccident = accidentPointsRef.current.find(a => {
+            const nearbyAccident = accidentPointsRef.current?.find(a => {
                 const distDeg = Math.sqrt(Math.pow(latitude - a.lat, 2) + Math.pow(longitude - a.lng, 2));
                 return (distDeg * 111000) <= 100;
             });
 
-            const nearbyCai = caiPointsRef.current.find(c => {
+            const nearbyCai = caiPointsRef.current?.find(c => {
                 const distDeg = Math.sqrt(Math.pow(latitude - c.lat, 2) + Math.pow(longitude - c.lng, 2));
                 return (distDeg * 111000) <= 90;
             });
 
-            const nearbyConst = constructionZonesRef.current.find(zone => {
+            const nearbyConst = currentConstZones?.find(zone => {
                 const distDeg = Math.sqrt(Math.pow(latitude - zone.lat, 2) + Math.pow(longitude - zone.lng, 2));
                 return (distDeg * 111000) <= zone.radius;
             });
 
-            const nearbyReport = citizenReportsRef.current.find(report => {
+            const nearbyReport = currentReports?.find(report => {
                 const rCoords = report.properties?.coordenadas;
                 if (!rCoords) return false;
                 const distDeg = Math.sqrt(Math.pow(latitude - rCoords[0], 2) + Math.pow(longitude - rCoords[1], 2));
@@ -1096,7 +1136,7 @@ export default function App() {
             // Comprobación de proximidad a novedades con foto para el HUD GPS
             let closestGpsPhotoHazard = null;
             let minGpsPhotoDist = 999;
-            citizenReportsRef.current.forEach(rep => {
+            currentReports?.forEach(rep => {
                 if (!rep.properties?.foto) return;
                 const rCoords = rep.properties?.coordenadas;
                 if (!rCoords) return;
@@ -1128,7 +1168,7 @@ export default function App() {
                 setProximityHazardPhoto(null);
             }
 
-            const nearbyLight = trafficLightsRef.current.find(light => {
+            const nearbyLight = trafficLightsRef.current?.find(light => {
                 const distDeg = Math.sqrt(
                     Math.pow(latitude - light.coordinates[0], 2) +
                     Math.pow(longitude - light.coordinates[1], 2)
@@ -1174,7 +1214,7 @@ export default function App() {
                 audioGuidance.speakEvent(`cai_gps_${nearbyCai.id}`, `CAI de policía ${nearbyCai.name} cercano.`, 40, false);
             }
 
-            if (simulationStateRef.current?.weather === 'lluvia') {
+            if (currentSimState?.weather === 'lluvia') {
                 if (!newGpsHudRec) newGpsHudRec = '🌧️ Calzada mojada por lluvia.';
                 audioGuidance.speakEvent('rain_warning_gps', 'Alerta de clima: Lluvia en tu sector. Calzada resbaladiza, reduce la velocidad.', 45, true);
             }
@@ -1190,17 +1230,17 @@ export default function App() {
         };
 
         const handleError = (err) => {
-            console.warn("GPS error:", err.message);
+            console.warn("[GPS] Error de sensor o permisos:", err.message);
         };
 
         const watchId = navigator.geolocation.watchPosition(handleSuccess, handleError, {
             enableHighAccuracy: true,
             maximumAge: 1000,
-            timeout: 5000
+            timeout: 8000
         });
 
         return () => navigator.geolocation.clearWatch(watchId);
-    }, [navStatus, navigationMode, activeRouteId, generatedRoutes, segments, simulationState, constructionZones, citizenReports, routeManeuvers, handleDynamicReroute]);
+    }, [navStatus, navigationMode, handleDynamicReroute]);
 
     // 5. Update default origin when localidad changes (only if no GPS user location)
     useEffect(() => {
@@ -1486,6 +1526,11 @@ export default function App() {
         const locName = localitiesMap[localidad]?.fullName || 'Bogotá';
         const feature = createQuickHazardFeature(hazardKey, coords, locName);
 
+        if (currentUser) {
+            feature.properties.userId = currentUser.uid;
+            feature.properties.reportedBy = currentUser.displayName;
+        }
+
         // 1. Reactive state update
         setCitizenReports(prev => [feature, ...prev]);
         // 2. Persist to localStorage (with 60-min automatic expiration)
@@ -1511,6 +1556,11 @@ export default function App() {
             severity,
             descripcion
         });
+
+        if (currentUser) {
+            feature.properties.userId = currentUser.uid;
+            feature.properties.reportedBy = currentUser.displayName;
+        }
 
         // 1. Reactive state update
         setCitizenReports(prev => [feature, ...prev]);
@@ -1916,6 +1966,8 @@ export default function App() {
             viewMode={viewMode}
             onViewModeChange={setViewMode}
             hideLogo={leftDrawerOpen}
+            currentUser={currentUser}
+            onOpenAuthModal={() => setIsAuthModalOpen(true)}
         />
     );
 
@@ -3029,6 +3081,8 @@ export default function App() {
                 onMapStyleChange={setMapStyle}
                 mapLayers={mapLayers}
                 onMapLayersChange={setMapLayers}
+                currentUser={currentUser}
+                onOpenAuthModal={() => setIsAuthModalOpen(true)}
             />
 
             {/* Modal de Llegada a Destino */}
@@ -3059,6 +3113,15 @@ export default function App() {
                     audioGuidance.speakRaw(`Buscando ruta hacia ${recognizedText}.`);
                     handleCalculateRoute(null, null, recognizedText);
                 }}
+            />
+
+            {/* Modal de Autenticación con Google y Perfil de Usuario */}
+            <AuthModal
+                isOpen={isAuthModalOpen}
+                onClose={() => setIsAuthModalOpen(false)}
+                currentUser={currentUser}
+                userReportsCount={citizenReports.filter(r => r.properties?.userId === currentUser?.uid).length}
+                showToast={showToast}
             />
 
             {/* ==================== SUITE DE NOTIFICACIONES & USABILIDAD ==================== */}

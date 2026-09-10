@@ -24,9 +24,10 @@ export function calculateDistanceMeters(p1, p2) {
 
 /**
  * Calculates perpendicular distance in meters from a point to the nearest segment of a route polyline.
- * Used for dynamic off-route (rerouting) detection.
+ * Uses forward-progress windowing when currentIndex is provided to prevent backward snapping,
+ * and falls back to full-route search if deviation exceeds 45m.
  */
-export function calculateDistanceToRoute(point, routeCoordinates = []) {
+export function calculateDistanceToRoute(point, routeCoordinates = [], currentIndex = null, windowSize = 25) {
     if (!point || !routeCoordinates || routeCoordinates.length === 0) {
         return { minDistanceMeters: Infinity, closestSegmentIndex: 0, closestCoordIndex: 0 };
     }
@@ -35,59 +36,82 @@ export function calculateDistanceToRoute(point, routeCoordinates = []) {
         return { minDistanceMeters: dist, closestSegmentIndex: 0, closestCoordIndex: 0 };
     }
 
-    let minDistanceMeters = Infinity;
-    let closestSegmentIndex = 0;
-    let closestCoordIndex = 0;
-
     const pLat = point[0];
     const pLng = point[1];
     const cosLat = Math.cos((pLat * Math.PI) / 180);
 
-    for (let i = 0; i < routeCoordinates.length - 1; i++) {
-        const a = routeCoordinates[i];
-        const b = routeCoordinates[i + 1];
+    const evaluateSegmentRange = (startI, endI) => {
+        let minD = Infinity;
+        let bestSeg = startI;
+        let bestCoord = startI;
 
-        // Convert delta to local meters projection around point
-        const ax = (a[1] - pLng) * 111000 * cosLat;
-        const ay = (a[0] - pLat) * 111000;
-        const bx = (b[1] - pLng) * 111000 * cosLat;
-        const by = (b[0] - pLat) * 111000;
+        for (let i = startI; i <= endI; i++) {
+            const a = routeCoordinates[i];
+            const b = routeCoordinates[i + 1];
+            if (!a || !b) continue;
 
-        const segDx = bx - ax;
-        const segDy = by - ay;
-        const segLenSq = segDx * segDx + segDy * segDy;
+            const ax = (a[1] - pLng) * 111000 * cosLat;
+            const ay = (a[0] - pLat) * 111000;
+            const bx = (b[1] - pLng) * 111000 * cosLat;
+            const by = (b[0] - pLat) * 111000;
 
-        let distMeters;
-        if (segLenSq < 0.0001) {
-            distMeters = Math.sqrt(ax * ax + ay * ay);
-        } else {
-            // Project origin (0, 0) in relative meters onto segment AB
-            const t = Math.max(0, Math.min(1, -(ax * segDx + ay * segDy) / segLenSq));
-            const projX = ax + t * segDx;
-            const projY = ay + t * segDy;
-            distMeters = Math.sqrt(projX * projX + projY * projY);
+            const segDx = bx - ax;
+            const segDy = by - ay;
+            const segLenSq = segDx * segDx + segDy * segDy;
+
+            let distMeters;
+            if (segLenSq < 0.0001) {
+                distMeters = Math.sqrt(ax * ax + ay * ay);
+            } else {
+                const t = Math.max(0, Math.min(1, -(ax * segDx + ay * segDy) / segLenSq));
+                const projX = ax + t * segDx;
+                const projY = ay + t * segDy;
+                distMeters = Math.sqrt(projX * projX + projY * projY);
+            }
+
+            if (distMeters < minD) {
+                minD = distMeters;
+                bestSeg = i;
+                bestCoord = (Math.sqrt(ax * ax + ay * ay) <= Math.sqrt(bx * bx + by * by)) ? i : i + 1;
+            }
         }
 
-        if (distMeters < minDistanceMeters) {
-            minDistanceMeters = distMeters;
-            closestSegmentIndex = i;
-            closestCoordIndex = (Math.sqrt(ax * ax + ay * ay) <= Math.sqrt(bx * bx + by * by)) ? i : i + 1;
+        return { minDistanceMeters: minD, closestSegmentIndex: bestSeg, closestCoordIndex: bestCoord };
+    };
+
+    const maxIdx = routeCoordinates.length - 2;
+
+    // 1. Forward-progress window: evaluar preferentemente el entorno del ciclista
+    if (currentIndex !== null && currentIndex !== undefined && !isNaN(currentIndex) && currentIndex >= 0) {
+        const startI = Math.max(0, currentIndex - 2);
+        const endI = Math.min(maxIdx, currentIndex + windowSize);
+        const windowRes = evaluateSegmentRange(startI, endI);
+
+        // Si la distancia dentro de la ventana es menor a 45m, se asume progresión normal en ruta
+        if (windowRes.minDistanceMeters <= 45) {
+            return {
+                minDistanceMeters: Math.round(windowRes.minDistanceMeters * 10) / 10,
+                closestSegmentIndex: windowRes.closestSegmentIndex,
+                closestCoordIndex: windowRes.closestCoordIndex
+            };
         }
     }
 
+    // 2. Si el ciclista se alejó más de 45m o no hay índice previo, buscar en toda la ruta
+    const globalRes = evaluateSegmentRange(0, maxIdx);
     return {
-        minDistanceMeters: Math.round(minDistanceMeters * 10) / 10,
-        closestSegmentIndex,
-        closestCoordIndex
+        minDistanceMeters: Math.round(globalRes.minDistanceMeters * 10) / 10,
+        closestSegmentIndex: globalRes.closestSegmentIndex,
+        closestCoordIndex: globalRes.closestCoordIndex
     };
 }
 
 /**
  * Projects a user coordinate [lat, lng] onto the nearest route segment
- * if the perpendicular distance is within maxSnapMeters (default 10m).
+ * if the perpendicular distance is within maxSnapMeters (default 32m).
  * Prevents erratic map puck jumping due to mobile GPS noise.
  */
-export function snapToSegment(userCoords, routeCoordinates = [], maxSnapMeters = 22) {
+export function snapToSegment(userCoords, routeCoordinates = [], maxSnapMeters = 32, currentIndex = null) {
     if (!userCoords || !routeCoordinates || routeCoordinates.length < 2) {
         return userCoords;
     }
@@ -96,12 +120,17 @@ export function snapToSegment(userCoords, routeCoordinates = [], maxSnapMeters =
     const pLng = userCoords[1];
     const cosLat = Math.cos((pLat * Math.PI) / 180);
 
+    const maxIdx = routeCoordinates.length - 2;
+    const startI = (currentIndex !== null && currentIndex >= 0) ? Math.max(0, currentIndex - 2) : 0;
+    const endI = (currentIndex !== null && currentIndex >= 0) ? Math.min(maxIdx, currentIndex + 25) : maxIdx;
+
     let minDistanceMeters = Infinity;
     let bestSnappedPoint = userCoords;
 
-    for (let i = 0; i < routeCoordinates.length - 1; i++) {
+    for (let i = startI; i <= endI; i++) {
         const a = routeCoordinates[i];
         const b = routeCoordinates[i + 1];
+        if (!a || !b) continue;
 
         // Delta in local meters
         const ax = (a[1] - pLng) * 111000 * cosLat;
@@ -144,7 +173,7 @@ export function snapToSegment(userCoords, routeCoordinates = [], maxSnapMeters =
 /**
  * Filters out impossible leaps (GPS multipath reflections) and applies exponential smoothing
  */
-export function smoothGpsCoordinate(lastCoord, newCoord, dtSeconds, maxAllowedSpeedKmh = 50) {
+export function smoothGpsCoordinate(lastCoord, newCoord, dtSeconds, maxAllowedSpeedKmh = 45, accuracy = 0) {
     if (!lastCoord || !newCoord) return newCoord;
     if (!dtSeconds || dtSeconds <= 0 || dtSeconds > 10) return newCoord;
 
@@ -152,12 +181,21 @@ export function smoothGpsCoordinate(lastCoord, newCoord, dtSeconds, maxAllowedSp
     const speedKmh = (dist / dtSeconds) * 3.6;
 
     if (speedKmh > maxAllowedSpeedKmh) {
-        // High speed jump / GPS glitch detected. Smooth to prevent sudden camera or route jumps
+        // Salto excesivo / glitch de GPS: suavizado fuerte para evitar saltos de cámara
         return [
-            lastCoord[0] + 0.35 * (newCoord[0] - lastCoord[0]),
-            lastCoord[1] + 0.35 * (newCoord[1] - lastCoord[1])
+            lastCoord[0] + 0.30 * (newCoord[0] - lastCoord[0]),
+            lastCoord[1] + 0.30 * (newCoord[1] - lastCoord[1])
         ];
     }
+
+    // Si la precisión es moderada (35-50m en zonas densas), suavizar suavemente
+    if (accuracy && accuracy > 35) {
+        return [
+            lastCoord[0] + 0.55 * (newCoord[0] - lastCoord[0]),
+            lastCoord[1] + 0.55 * (newCoord[1] - lastCoord[1])
+        ];
+    }
+
     return newCoord;
 }
 
