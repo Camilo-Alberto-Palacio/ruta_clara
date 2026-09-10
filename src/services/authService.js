@@ -12,6 +12,8 @@ import {
     signOut as fbSignOut, 
     onAuthStateChanged 
 } from 'firebase/auth';
+import { Capacitor } from '@capacitor/core';
+import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
 
 const STORAGE_KEY = 'ruta_clara_auth_user';
 
@@ -49,6 +51,27 @@ class AuthService {
     constructor() {
         this.listeners = new Set();
         this.currentUser = this.loadStoredUser();
+
+        if (Capacitor.isNativePlatform()) {
+            FirebaseAuthentication.addListener('authStateChange', (change) => {
+                if (change && change.user) {
+                    const u = change.user;
+                    const mappedUser = {
+                        uid: u.uid,
+                        displayName: u.displayName || u.email?.split('@')[0] || 'Ciclista Ruta Clara',
+                        email: u.email || '',
+                        photoURL: u.photoUrl || u.photoURL || null,
+                        role: 'Ciclista Ciudadano',
+                        provider: 'google'
+                    };
+                    this.setUser(mappedUser);
+                } else if (this.currentUser && this.currentUser.provider === 'google') {
+                    this.setUser(null);
+                }
+            }).catch((err) => {
+                console.warn("[AuthService] Error registrando listener nativo:", err);
+            });
+        }
 
         if (auth) {
             // Manejar retorno de redirección móvil si aplica
@@ -136,6 +159,33 @@ class AuthService {
      * Iniciar sesión real con Google
      */
     async loginWithGoogle() {
+        // 1. En entorno Nativo de Android/iOS (Capacitor):
+        // Usa la ventana nativa de Google Play Services de Android (como las demás apps)
+        // NUNCA abre Brave ni ningún navegador externo.
+        if (Capacitor.isNativePlatform()) {
+            try {
+                const result = await FirebaseAuthentication.signInWithGoogle();
+                const u = result.user;
+                if (!u) {
+                    throw new Error("NO_USER_RETURNED");
+                }
+                const mappedUser = {
+                    uid: u.uid,
+                    displayName: u.displayName || u.email?.split('@')[0] || 'Ciclista Registrado',
+                    email: u.email || '',
+                    photoURL: u.photoUrl || u.photoURL || null,
+                    role: 'Ciclista Ciudadano',
+                    provider: 'google'
+                };
+                this.setUser(mappedUser);
+                return mappedUser;
+            } catch (nativeError) {
+                console.error("[AuthService] Error en Google Sign-In nativo:", nativeError);
+                throw nativeError;
+            }
+        }
+
+        // 2. En Navegador Web convencional (PC o Chrome desktop):
         if (!this.isFirebaseReady()) {
             throw new Error("FIREBASE_NOT_CONFIGURED");
         }
@@ -145,8 +195,8 @@ class AuthService {
             const fbUser = result.user;
             const mappedUser = {
                 uid: fbUser.uid,
-                displayName: fbUser.displayName || 'Ciclista Registrado',
-                email: fbUser.email,
+                displayName: fbUser.displayName || fbUser.email?.split('@')[0] || 'Ciclista Registrado',
+                email: fbUser.email || '',
                 photoURL: fbUser.photoURL || null,
                 role: 'Ciclista Ciudadano',
                 provider: 'google'
@@ -154,13 +204,7 @@ class AuthService {
             this.setUser(mappedUser);
             return mappedUser;
         } catch (error) {
-            // Si el navegador móvil bloquea el pop-up, intentar redirect automático
-            if (error.code === 'auth/popup-blocked') {
-                console.warn("[AuthService] Popup bloqueado, usando signInWithRedirect...");
-                await signInWithRedirect(auth, googleProvider);
-                return null;
-            }
-            console.error("[AuthService] Error en Google Sign-In:", error);
+            console.error("[AuthService] Error en Google Sign-In Web:", error);
             throw error;
         }
     }
@@ -186,6 +230,13 @@ class AuthService {
      * Cerrar sesión
      */
     async logout() {
+        if (Capacitor.isNativePlatform()) {
+            try {
+                await FirebaseAuthentication.signOut();
+            } catch (e) {
+                console.warn("[AuthService] Error cerrando sesión nativa:", e);
+            }
+        }
         if (auth && this.currentUser) {
             try {
                 await fbSignOut(auth);

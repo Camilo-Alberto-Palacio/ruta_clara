@@ -27,12 +27,15 @@ export default function AuthModal({
         } catch (error) {
             console.error("Error al iniciar sesión con Google:", error);
             setAuthError(error);
-            if (error.code === 'auth/popup-closed-by-user') {
-                showToast("Has cerrado la ventana de inicio de sesión de Google.", "warning");
-            } else if (error.code === 'auth/configuration-not-found' || error.message?.includes('configuration')) {
+            const errStr = (error.message || error.code || '').toLowerCase();
+            if (error.code === 'auth/popup-closed-by-user' || errStr.includes('cancel')) {
+                showToast("Selección de cuenta cancelada.", "info");
+            } else if (errStr.includes('10') || errStr.includes('developer_error')) {
+                showToast("⚠️ Registra la huella SHA-1 en Firebase para acceso nativo.", "error");
+            } else if (error.code === 'auth/configuration-not-found' || errStr.includes('configuration')) {
                 showToast("⚠️ Proveedor Google no habilitado en Firebase Console.", "error");
             } else {
-                showToast("Error de conexión con Google Identity.", "error");
+                showToast("Error de autenticación con Google.", "error");
             }
         } finally {
             setIsLoading(false);
@@ -207,15 +210,18 @@ export default function AuthModal({
                             <div className="mt-3.5 p-3 rounded-2xl bg-amber-50 border border-amber-200 text-left text-xs">
                                 <div className="flex items-center gap-2 text-amber-800 font-bold mb-1">
                                     <i className="fa-solid fa-triangle-exclamation"></i>
-                                    <span>Paso requerido en Firebase Console:</span>
+                                    <span>Acceso Nativo en Android (Sin Navegador):</span>
                                 </div>
-                                <p className="text-3xs text-amber-900 leading-relaxed m-0 mb-2">
-                                    El mensaje <i>"The requested action is invalid"</i> indica que el proveedor <b>Google</b> debe ser activado en tu consola de Firebase:
+                                <p className="text-3xs text-amber-900 leading-relaxed m-0 mb-1.5">
+                                    Para que Android muestre la ventana nativa de Google sin abrir Brave, registra la huella <b>SHA-1</b> de tu app en Firebase Console:
                                 </p>
+                                <div className="bg-white p-2 rounded-xl border border-amber-200 font-mono text-[10px] text-slate-800 break-all select-all mb-2">
+                                    1F:97:D9:C6:54:CE:9C:27:01:55:0A:47:7D:49:C9:43:BC:7D:E7:3C
+                                </div>
                                 <ol className="text-3xs text-amber-950 pl-4 space-y-1 m-0">
-                                    <li>Entra a <b>console.firebase.google.com</b> en tu proyecto.</li>
-                                    <li>Ve a <b>Authentication &gt; Sign-in method &gt; Google</b>.</li>
-                                    <li>Activa <b>Habilitar</b>, selecciona tu <b>correo de asistencia</b> y haz clic en <b>Guardar</b>.</li>
+                                    <li>En Firebase Console ve a <b>Configuración del proyecto</b> (icono engranaje).</li>
+                                    <li>Baja a <b>Tus apps</b> &gt; App Android (<code>com.semillero.rutaclara</code>).</li>
+                                    <li>Toca <b>Agregar huella digital</b>, pega el SHA-1 de arriba y Guarda.</li>
                                 </ol>
                             </div>
                         )}
