@@ -6,7 +6,8 @@ export default function AuthModal({
     onClose,
     currentUser,
     userReportsCount = 0,
-    showToast = () => {}
+    showToast = () => {},
+    onOpenFavorites
 }) {
     const [isLoading, setIsLoading] = useState(false);
     const [authError, setAuthError] = useState(null);
@@ -135,6 +136,20 @@ export default function AuthModal({
                                 Tus reportes de baches y luminarias ayudan a pedalear más seguro por Bogotá.
                             </p>
                         </div>
+
+                        {/* Acceso a Lugares Favoritos */}
+                        {onOpenFavorites && (
+                            <button
+                                onClick={() => {
+                                    if (onClose) onClose();
+                                    onOpenFavorites();
+                                }}
+                                className="w-full py-3 px-4 rounded-2xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-extrabold text-sm flex items-center justify-center gap-2 transition-all cursor-pointer border border-emerald-200 active:scale-98 shadow-2xs"
+                            >
+                                <i className="fa-solid fa-star text-amber-500"></i>
+                                <span>Mis Lugares Importantes (Casa / Trabajo)</span>
+                            </button>
+                        )}
 
                         {/* Botón Cerrar Sesión */}
                         <button

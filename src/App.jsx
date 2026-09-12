@@ -49,6 +49,8 @@ import HazardProximityPill from './components/molecules/HazardProximityPill';
 import MapSettingsModal from './components/molecules/MapSettingsModal';
 import VoiceSearchModal from './components/molecules/VoiceSearchModal';
 import AuthModal from './components/molecules/AuthModal';
+import FavoritePlacesModal from './components/molecules/FavoritePlacesModal';
+import { favoritePlacesService } from './services/favoritePlacesService';
 import { authService } from './services/authService';
 import { HAZARD_TYPES, loadActiveUserReports, saveUserReport, createQuickHazardFeature, syncReport } from './utils/quickReportService';
 import { emitToast } from './utils/toastService';
@@ -323,6 +325,13 @@ export default function App() {
     const [currentUser, setCurrentUser] = useState(() => authService.getCurrentUser());
     const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
+    // Lugares Favoritos y Preferencias del Ciclista
+    const [userFavorites, setUserFavorites] = useState(() => 
+        favoritePlacesService.getLocalFavorites(authService.getCurrentUser()?.uid)
+    );
+    const [isFavoritesModalOpen, setIsFavoritesModalOpen] = useState(false);
+    const pendingFavoriteCallbackRef = useRef(null);
+
     useEffect(() => {
         const unsubscribe = authService.onAuthChange((user) => {
             setCurrentUser(user);
@@ -336,6 +345,19 @@ export default function App() {
         });
         return () => unsubscribe();
     }, []);
+
+    // Suscripción a favoritos en tiempo real (Firestore / Local)
+    useEffect(() => {
+        const unsub = favoritePlacesService.subscribeFavorites(currentUser?.uid, (list) => {
+            setUserFavorites(list || []);
+        });
+        return () => unsub();
+    }, [currentUser?.uid]);
+
+    // Sugerencia Inteligente de Viaje según la hora (Smart Commute)
+    const smartSuggestion = useMemo(() => {
+        return favoritePlacesService.getSmartCommuteSuggestion(userFavorites);
+    }, [userFavorites]);
 
     // Referencias sincronizadas para estabilización continua del GPS Watcher sin reinicios destructivos
     const generatedRoutesRef = useRef(generatedRoutes);
@@ -1406,6 +1428,16 @@ export default function App() {
             return;
         }
 
+        if (activeMode === 'favorite') {
+            const formattedCoord = `${latlng.lat.toFixed(4)}, ${latlng.lng.toFixed(4)}`;
+            if (pendingFavoriteCallbackRef.current) {
+                pendingFavoriteCallbackRef.current({ lat: latlng.lat, lng: latlng.lng }, `Punto en mapa (${formattedCoord})`);
+                pendingFavoriteCallbackRef.current = null;
+            }
+            setIsFavoritesModalOpen(true);
+            return;
+        }
+
         setRoutePoints(prev => ({
             ...prev,
             [activeMode]: { lat: latlng.lat, lng: latlng.lng }
@@ -2090,6 +2122,8 @@ export default function App() {
             weatherData={weatherData}
             userLocation={userLocation}
             onStartVoice={() => setIsVoiceSearchOpen(true)}
+            userFavorites={userFavorites}
+            onOpenManageFavorites={() => setIsFavoritesModalOpen(true)}
         />
     );
 
@@ -2398,34 +2432,76 @@ export default function App() {
 
             {/* 2. Floating Top Planner Card - hidden during navigation */}
             {isMobile && !isNavigating && !generatedRoutes.length && (
-                <div className="absolute top-4 left-4 right-4 z-10 flex items-center gap-2 max-w-[calc(100vw-2rem)] mx-auto">
-                    <div 
-                        onClick={() => setIsMobileSearchOpen(true)}
-                        className="flex-1 backdrop-blur-md p-3.5 rounded-2xl shadow-lg flex items-center gap-3 cursor-pointer transition-all"
-                        style={{
-                            background: 'var(--bg-surface)',
-                            border: '1px solid var(--border-surface)',
-                            color: 'var(--text-on-surface)'
-                        }}
-                    >
-                        <i className="fa-solid fa-magnifying-glass text-emerald-600 text-base"></i>
-                        <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>¿A dónde quieres ir hoy? (Planificar ruta)</span>
+                <div className="absolute top-4 left-4 right-4 z-10 flex flex-col gap-2 max-w-[calc(100vw-2rem)] mx-auto">
+                    <div className="flex items-center gap-2">
+                        <div 
+                            onClick={() => setIsMobileSearchOpen(true)}
+                            className="flex-1 backdrop-blur-md p-3.5 rounded-2xl shadow-lg flex items-center gap-3 cursor-pointer transition-all"
+                            style={{
+                                background: 'var(--bg-surface)',
+                                border: '1px solid var(--border-surface)',
+                                color: 'var(--text-on-surface)'
+                            }}
+                        >
+                            <i className="fa-solid fa-magnifying-glass text-emerald-600 text-base"></i>
+                            <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>¿A dónde quieres ir hoy?</span>
+                        </div>
+                        {/* Botón Mis Lugares Importantes */}
+                        <button
+                            onClick={() => setIsFavoritesModalOpen(true)}
+                            className="w-12 h-12 rounded-2xl bg-white hover:bg-amber-50 text-amber-500 flex items-center justify-center shadow-lg cursor-pointer border border-amber-100 flex-shrink-0 active:scale-95 transition-all"
+                            title="Mis Lugares Guardados (Casa, Trabajo...)"
+                        >
+                            <i className="fa-solid fa-star text-base"></i>
+                        </button>
+                        {/* Botón de Dictado por Voz */}
+                        <button
+                            onClick={() => setIsVoiceSearchOpen(true)}
+                            className="w-12 h-12 rounded-2xl bg-white hover:bg-emerald-50 text-emerald-600 flex items-center justify-center shadow-lg cursor-pointer border border-emerald-100 flex-shrink-0 active:scale-95 transition-all"
+                            title="Dictar destino por voz"
+                        >
+                            <i className="fa-solid fa-microphone text-base"></i>
+                        </button>
+                        {/* Botón SOS */}
+                        <button
+                            onClick={() => setIsSafeHavenOpen(true)}
+                            className="w-12 h-12 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center shadow-lg cursor-pointer border-none flex-shrink-0 animate-pulse"
+                            title="Botón SOS de Emergencia - Refugio CAI"
+                        >
+                            <i className="fa-solid fa-triangle-exclamation text-base"></i>
+                        </button>
                     </div>
-                    {/* Botón de Dictado por Voz en Pantalla Principal */}
-                    <button
-                        onClick={() => setIsVoiceSearchOpen(true)}
-                        className="w-12 h-12 rounded-2xl bg-white hover:bg-emerald-50 text-emerald-600 flex items-center justify-center shadow-lg cursor-pointer border border-emerald-100 flex-shrink-0 active:scale-95 transition-all"
-                        title="Dictar destino por voz"
-                    >
-                        <i className="fa-solid fa-microphone text-base"></i>
-                    </button>
-                    <button
-                        onClick={() => setIsSafeHavenOpen(true)}
-                        className="w-12 h-12 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center shadow-lg cursor-pointer border-none flex-shrink-0 animate-pulse"
-                        title="Botón SOS de Emergencia - Refugio CAI"
-                    >
-                        <i className="fa-solid fa-triangle-exclamation text-base"></i>
-                    </button>
+
+                    {/* Sugerencia Inteligente Contextual (Smart Commute en 1 toque) */}
+                    {smartSuggestion && (
+                        <div 
+                            onClick={() => {
+                                handleSelectDestLocation(smartSuggestion.place.coords, smartSuggestion.place.label);
+                                handleCalculateRoute(null, smartSuggestion.place.coords, smartSuggestion.place.label);
+                                favoritePlacesService.recordPlaceVisit(currentUser?.uid, smartSuggestion.place.id);
+                                showToast(`🚀 Trazando ruta segura hacia ${smartSuggestion.place.label}...`, "success");
+                            }}
+                            className="w-full py-2.5 px-3.5 bg-white/95 backdrop-blur-md rounded-2xl border border-emerald-200/90 shadow-lg flex items-center justify-between gap-2.5 cursor-pointer active:scale-98 transition-all animate-fade-in"
+                        >
+                            <div className="flex items-center gap-2.5 overflow-hidden">
+                                <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center flex-shrink-0 text-sm">
+                                    <i className={smartSuggestion.icon}></i>
+                                </div>
+                                <div className="flex flex-col text-left overflow-hidden">
+                                    <span className="text-[10px] font-black text-emerald-700 uppercase tracking-wider">
+                                        {smartSuggestion.badge}
+                                    </span>
+                                    <span className="text-xs font-black text-slate-800 truncate">
+                                        {smartSuggestion.title}
+                                    </span>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-emerald-600 font-extrabold text-xs flex-shrink-0 bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-200">
+                                <span>1 toque</span>
+                                <i className="fa-solid fa-arrow-right text-[10px]"></i>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -2542,10 +2618,19 @@ export default function App() {
 
                     <div className="my-3">
                         <QuickDestinationChips
+                            userFavorites={userFavorites}
+                            onOpenManageFavorites={() => {
+                                setIsMobileSearchOpen(false);
+                                setIsFavoritesModalOpen(true);
+                            }}
                             onSelectDestination={(item) => {
                                 handleSelectDestLocation(item.coords, item.name);
                                 handleCalculateRoute(null, item.coords, item.name);
                                 setIsMobileSearchOpen(false);
+                                if (item.isFavorite) {
+                                    const fav = userFavorites.find(f => f.label === item.name);
+                                    if (fav) favoritePlacesService.recordPlaceVisit(currentUser?.uid, fav.id);
+                                }
                             }}
                             activeDestName={destInput}
                         />
@@ -2769,6 +2854,13 @@ export default function App() {
                             title="Planificador de Rutas"
                         >
                             <i className="fa-solid fa-map-location-dot"></i>
+                        </button>
+                        <button 
+                            onClick={() => setIsFavoritesModalOpen(true)} 
+                            className="tab-vertical-btn text-amber-500 hover:text-amber-600 hover:bg-amber-50"
+                            title="⭐ Mis Lugares Importantes (Casa, Trabajo...)"
+                        >
+                            <i className="fa-solid fa-star"></i>
                         </button>
                         <button 
                             onClick={() => setActiveTab('cpted')} 
@@ -3143,15 +3235,23 @@ export default function App() {
             <VoiceSearchModal
                 isOpen={isVoiceSearchOpen}
                 onClose={() => setIsVoiceSearchOpen(false)}
-                onDestinationRecognized={(recognizedText) => {
+                userFavorites={userFavorites}
+                onDestinationRecognized={(recognizedText, matchedPlace) => {
                     setIsVoiceSearchOpen(false);
-                    setDestInput(recognizedText);
+                    if (matchedPlace && matchedPlace.coords) {
+                        handleSelectDestLocation(matchedPlace.coords, matchedPlace.label || recognizedText);
+                        audioGuidance.speakRaw(`Buscando ruta hacia ${matchedPlace.label || recognizedText}.`);
+                        handleCalculateRoute(null, matchedPlace.coords, matchedPlace.label || recognizedText);
+                        favoritePlacesService.recordPlaceVisit(currentUser?.uid, matchedPlace.id);
+                    } else {
+                        setDestInput(recognizedText);
+                        audioGuidance.speakRaw(`Buscando ruta hacia ${recognizedText}.`);
+                        handleCalculateRoute(null, null, recognizedText);
+                    }
                     if (!isMobile) {
                         setLeftDrawerOpen(true);
                         setActiveTab('routes');
                     }
-                    audioGuidance.speakRaw(`Buscando ruta hacia ${recognizedText}.`);
-                    handleCalculateRoute(null, null, recognizedText);
                 }}
             />
 
@@ -3161,6 +3261,31 @@ export default function App() {
                 onClose={() => setIsAuthModalOpen(false)}
                 currentUser={currentUser}
                 userReportsCount={citizenReports.filter(r => r.properties?.userId === currentUser?.uid).length}
+                showToast={showToast}
+                onOpenFavorites={() => setIsFavoritesModalOpen(true)}
+            />
+
+            {/* Modal de Gestión de Lugares Frecuentes y Preferencias del Ciclista */}
+            <FavoritePlacesModal
+                isOpen={isFavoritesModalOpen}
+                onClose={() => setIsFavoritesModalOpen(false)}
+                currentUser={currentUser}
+                userLocation={userLocation}
+                onSelectPlaceAndNavigate={(place) => {
+                    handleSelectDestLocation(place.coords, place.label);
+                    handleCalculateRoute(null, place.coords, place.label);
+                    showToast(`🚀 Pedaleando hacia ${place.label}...`, "success");
+                    if (!isMobile) {
+                        setLeftDrawerOpen(true);
+                        setActiveTab('routes');
+                    }
+                }}
+                onSelectLocationOnMap={(callback) => {
+                    setIsFavoritesModalOpen(false);
+                    setSelectingLocationMode('favorite');
+                    pendingFavoriteCallbackRef.current = callback;
+                    showToast("📍 Toca un punto en el mapa para fijar tu lugar favorito", "info");
+                }}
                 showToast={showToast}
             />
 

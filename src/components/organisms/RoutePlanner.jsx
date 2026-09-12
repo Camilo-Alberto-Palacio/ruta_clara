@@ -30,7 +30,9 @@ export default function RoutePlanner({
     onDepartureHourChange,
     weatherData = null,
     userLocation = null,
-    onStartVoice = null
+    onStartVoice = null,
+    userFavorites = [],
+    onOpenManageFavorites = null
 }) {
     const handleToggle = (key, val) => {
         if (onMapLayersChange) {
@@ -116,6 +118,8 @@ export default function RoutePlanner({
                     }
                 }}
                 activeDestName={destInput}
+                userFavorites={userFavorites}
+                onOpenManageFavorites={onOpenManageFavorites}
             />
 
             {/* Time of Day & Weather Context (CU-01) */}

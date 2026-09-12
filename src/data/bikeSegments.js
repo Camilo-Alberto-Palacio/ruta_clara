@@ -397,5 +397,527 @@ export const bikeSegments = {
         visibility: 3,
         guardianCai: true,
         guardianRuta: false
+    },
+
+    // ==========================================
+    // Chapinero (02)
+    // ==========================================
+    'chap_septima_sur': {
+        id: 'chap_septima_sur',
+        name: 'Carrera 7ma (Parque Nacional a Calle 60 - Javeriana)',
+        localidad: 'Chapinero (02)',
+        upz: 'UPZ 89 - San Isidro Patios',
+        baselineCrime: 'Medio',
+        coordinates: [
+            [4.6240, -74.0650],
+            [4.6340, -74.0635],
+            [4.6440, -74.0620]
+        ],
+        lightingType: 'LED',
+        watts: 150,
+        weather: 'seco',
+        visibility: 3,
+        guardianCai: true,
+        guardianRuta: true
+    },
+    'chap_septima_norte': {
+        id: 'chap_septima_norte',
+        name: 'Carrera 7ma (Calle 60 a Calle 100 - Chicó)',
+        localidad: 'Chapinero (02)',
+        upz: 'UPZ 90 - El Refugio',
+        baselineCrime: 'Bajo',
+        coordinates: [
+            [4.6440, -74.0620],
+            [4.6620, -74.0570],
+            [4.6830, -74.0490]
+        ],
+        lightingType: 'LED',
+        watts: 200,
+        weather: 'seco',
+        visibility: 3,
+        guardianCai: true,
+        guardianRuta: true
+    },
+    'chap_carrera11': {
+        id: 'chap_carrera11',
+        name: 'Ciclorruta Carrera 11 (Calle 82 a Calle 100 - Virrey)',
+        localidad: 'Chapinero (02)',
+        upz: 'UPZ 90 - El Refugio',
+        baselineCrime: 'Bajo',
+        coordinates: [
+            [4.6660, -74.0550],
+            [4.6738, -74.0535],
+            [4.6840, -74.0480]
+        ],
+        lightingType: 'LED',
+        watts: 200,
+        weather: 'seco',
+        visibility: 3,
+        guardianCai: false,
+        guardianRuta: false
+    },
+    'chap_calle72': {
+        id: 'chap_calle72',
+        name: 'Calle 72 Corredor Financiero (Cra 7ma a Av. Caracas)',
+        localidad: 'Chapinero (02)',
+        upz: 'UPZ 99 - Chapinero',
+        baselineCrime: 'Medio',
+        coordinates: [
+            [4.6560, -74.0580],
+            [4.6575, -74.0620],
+            [4.6590, -74.0665]
+        ],
+        lightingType: 'LED',
+        watts: 150,
+        weather: 'seco',
+        visibility: 2,
+        guardianCai: true,
+        guardianRuta: false
+    },
+
+    // ==========================================
+    // Santa Fe (03) & La Candelaria (17)
+    // ==========================================
+    'stafe_eje_ambiental': {
+        id: 'stafe_eje_ambiental',
+        name: 'Eje Ambiental / Av. Jiménez (Cra 1 a Cra 10)',
+        localidad: 'Santa Fe (03)',
+        upz: 'UPZ 91 - Sagrado Corazón',
+        baselineCrime: 'Alto',
+        coordinates: [
+            [4.6015, -74.0661],
+            [4.6010, -74.0715],
+            [4.6025, -74.0760]
+        ],
+        lightingType: 'LED',
+        watts: 150,
+        weather: 'seco',
+        visibility: 2,
+        guardianCai: true,
+        guardianRuta: true
+    },
+    'stafe_carrera7_centro': {
+        id: 'stafe_carrera7_centro',
+        name: 'Carrera 7ma Peatonal (Plaza de Bolívar a Calle 26)',
+        localidad: 'Santa Fe (03)',
+        upz: 'UPZ 92 - La Macarena',
+        baselineCrime: 'Medio',
+        coordinates: [
+            [4.5980, -74.0760],
+            [4.6070, -74.0710],
+            [4.6150, -74.0680]
+        ],
+        lightingType: 'LED',
+        watts: 200,
+        weather: 'seco',
+        visibility: 3,
+        guardianCai: true,
+        guardianRuta: true
+    },
+    'candelaria_cl10': {
+        id: 'candelaria_cl10',
+        name: 'Calle 10 Histórica (Plazoleta Chorro de Quevedo)',
+        localidad: 'La Candelaria (17)',
+        upz: 'UPZ 94 - La Candelaria',
+        baselineCrime: 'Medio',
+        coordinates: [
+            [4.5970, -74.0700],
+            [4.5960, -74.0720],
+            [4.5950, -74.0745]
+        ],
+        lightingType: 'Sodio',
+        watts: 100,
+        weather: 'seco',
+        visibility: 2,
+        guardianCai: true,
+        guardianRuta: false
+    },
+
+    // ==========================================
+    // Teusaquillo (13)
+    // ==========================================
+    'teusa_calle26_oriente': {
+        id: 'teusa_calle26_oriente',
+        name: 'Av. Calle 26 (Av. Caracas a Cra 30 / U. Nacional)',
+        localidad: 'Teusaquillo (13)',
+        upz: 'UPZ 106 - Teusaquillo',
+        baselineCrime: 'Medio',
+        coordinates: [
+            [4.6160, -74.0730],
+            [4.6260, -74.0810],
+            [4.6320, -74.0860]
+        ],
+        lightingType: 'LED',
+        watts: 200,
+        weather: 'seco',
+        visibility: 3,
+        guardianCai: true,
+        guardianRuta: true
+    },
+    'teusa_calle26_salitre': {
+        id: 'teusa_calle26_salitre',
+        name: 'Av. Calle 26 (Cra 30 a Gran Estación / Cra 66)',
+        localidad: 'Teusaquillo (13)',
+        upz: 'UPZ 107 - Quinta Paredes',
+        baselineCrime: 'Bajo',
+        coordinates: [
+            [4.6320, -74.0860],
+            [4.6410, -74.0950],
+            [4.6475, -74.1023]
+        ],
+        lightingType: 'LED',
+        watts: 200,
+        weather: 'seco',
+        visibility: 3,
+        guardianCai: true,
+        guardianRuta: true
+    },
+    'teusa_calle53': {
+        id: 'teusa_calle53',
+        name: 'Ciclorruta Calle 53 (Galerías a Parque Simón Bolívar)',
+        localidad: 'Teusaquillo (13)',
+        upz: 'UPZ 106 - Teusaquillo',
+        baselineCrime: 'Bajo',
+        coordinates: [
+            [4.6450, -74.0720],
+            [4.6510, -74.0830],
+            [4.6583, -74.0935]
+        ],
+        lightingType: 'LED',
+        watts: 150,
+        weather: 'seco',
+        visibility: 3,
+        guardianCai: false,
+        guardianRuta: true
+    },
+    'teusa_nqs_centro': {
+        id: 'teusa_nqs_centro',
+        name: 'Av. NQS / Carrera 30 (Calle 26 a Movistar Arena)',
+        localidad: 'Teusaquillo (13)',
+        upz: 'UPZ 107 - Quinta Paredes',
+        baselineCrime: 'Medio',
+        coordinates: [
+            [4.6310, -74.0840],
+            [4.6420, -74.0810],
+            [4.6520, -74.0780]
+        ],
+        lightingType: 'LED',
+        watts: 150,
+        weather: 'seco',
+        visibility: 2,
+        guardianCai: false,
+        guardianRuta: false
+    },
+
+    // ==========================================
+    // Suba (11)
+    // ==========================================
+    'suba_av_suba_sur': {
+        id: 'suba_av_suba_sur',
+        name: 'Av. Suba (Calle 100 a Humedal Córdoba)',
+        localidad: 'Suba (11)',
+        upz: 'UPZ 71 - Niza',
+        baselineCrime: 'Bajo',
+        coordinates: [
+            [4.6920, -74.0680],
+            [4.7080, -74.0770],
+            [4.7190, -74.0830]
+        ],
+        lightingType: 'LED',
+        watts: 200,
+        weather: 'seco',
+        visibility: 3,
+        guardianCai: true,
+        guardianRuta: false
+    },
+    'suba_av_suba_norte': {
+        id: 'suba_av_suba_norte',
+        name: 'Av. Suba (Humedal Córdoba a Portal Suba)',
+        localidad: 'Suba (11)',
+        upz: 'UPZ 27 - Suba Rincón',
+        baselineCrime: 'Medio',
+        coordinates: [
+            [4.7190, -74.0830],
+            [4.7330, -74.0900],
+            [4.7478, -74.0954]
+        ],
+        lightingType: 'LED',
+        watts: 150,
+        weather: 'seco',
+        visibility: 2,
+        guardianCai: true,
+        guardianRuta: true
+    },
+    'suba_calle134': {
+        id: 'suba_calle134',
+        name: 'Ciclorruta Calle 134 (Auto Norte a Av. Suba)',
+        localidad: 'Suba (11)',
+        upz: 'UPZ 71 - Niza',
+        baselineCrime: 'Bajo',
+        coordinates: [
+            [4.7230, -74.0530],
+            [4.7240, -74.0690],
+            [4.7250, -74.0810]
+        ],
+        lightingType: 'LED',
+        watts: 150,
+        weather: 'seco',
+        visibility: 3,
+        guardianCai: false,
+        guardianRuta: false
+    },
+
+    // ==========================================
+    // Usaquén (01)
+    // ==========================================
+    'usaq_auto_norte': {
+        id: 'usaq_auto_norte',
+        name: 'Autopista Norte (Calle 100 a Calle 170 / Portal Norte)',
+        localidad: 'Usaquén (01)',
+        upz: 'UPZ 10 - La Uribe',
+        baselineCrime: 'Bajo',
+        coordinates: [
+            [4.6930, -74.0590],
+            [4.7230, -74.0530],
+            [4.7554, -74.0458]
+        ],
+        lightingType: 'LED',
+        watts: 200,
+        weather: 'seco',
+        visibility: 3,
+        guardianCai: true,
+        guardianRuta: true
+    },
+    'usaq_carrera7_norte': {
+        id: 'usaq_carrera7_norte',
+        name: 'Carrera 7ma (Calle 100 a Usaquén Plaza / Calle 127)',
+        localidad: 'Usaquén (01)',
+        upz: 'UPZ 12 - Toberín',
+        baselineCrime: 'Bajo',
+        coordinates: [
+            [4.6830, -74.0490],
+            [4.6980, -74.0320],
+            [4.7080, -74.0290]
+        ],
+        lightingType: 'LED',
+        watts: 150,
+        weather: 'seco',
+        visibility: 3,
+        guardianCai: true,
+        guardianRuta: false
+    },
+
+    // ==========================================
+    // Kennedy (08)
+    // ==========================================
+    'kenn_americas_oriente': {
+        id: 'kenn_americas_oriente',
+        name: 'Av. Las Américas (Puente Aranda Cra 50 a Banderas)',
+        localidad: 'Kennedy (08)',
+        upz: 'UPZ 46 - Castilla',
+        baselineCrime: 'Alto',
+        coordinates: [
+            [4.6280, -74.1160],
+            [4.6250, -74.1370],
+            [4.6220, -74.1530]
+        ],
+        lightingType: 'Sodio',
+        watts: 150,
+        weather: 'seco',
+        visibility: 2,
+        guardianCai: true,
+        guardianRuta: true
+    },
+    'kenn_americas_portal': {
+        id: 'kenn_americas_portal',
+        name: 'Av. Las Américas (Banderas a Portal Américas)',
+        localidad: 'Kennedy (08)',
+        upz: 'UPZ 47 - Kennedy Central',
+        baselineCrime: 'Alto',
+        coordinates: [
+            [4.6220, -74.1530],
+            [4.6260, -74.1680],
+            [4.6293, -74.1788]
+        ],
+        lightingType: 'Sodio',
+        watts: 100,
+        weather: 'seco',
+        visibility: 1,
+        guardianCai: false,
+        guardianRuta: true
+    },
+    'kenn_alameda_tintal': {
+        id: 'kenn_alameda_tintal',
+        name: 'Alameda El Porvenir (Biblioteca El Tintal a Patio Bonito)',
+        localidad: 'Kennedy (08)',
+        upz: 'UPZ 82 - Patio Bonito',
+        baselineCrime: 'Alto',
+        coordinates: [
+            [4.6400, -74.1620],
+            [4.6330, -74.1690],
+            [4.6260, -74.1760]
+        ],
+        lightingType: 'LED',
+        watts: 150,
+        weather: 'seco',
+        visibility: 2,
+        guardianCai: true,
+        guardianRuta: false
+    },
+    'kenn_boyaca_sur': {
+        id: 'kenn_boyaca_sur',
+        name: 'Av. Boyacá (Av. Primero de Mayo a Sevillana)',
+        localidad: 'Kennedy (08)',
+        upz: 'UPZ 45 - Carvajal',
+        baselineCrime: 'Medio',
+        coordinates: [
+            [4.6050, -74.1480],
+            [4.5990, -74.1440],
+            [4.5920, -74.1410]
+        ],
+        lightingType: 'Sodio',
+        watts: 150,
+        weather: 'seco',
+        visibility: 2,
+        guardianCai: false,
+        guardianRuta: false
+    },
+
+    // ==========================================
+    // Fontibón (09)
+    // ==========================================
+    'font_calle26_occidente': {
+        id: 'font_calle26_occidente',
+        name: 'Av. Calle 26 (Gran Estación a Aeropuerto El Dorado)',
+        localidad: 'Fontibón (09)',
+        upz: 'UPZ 110 - Fontibón San Pablo',
+        baselineCrime: 'Bajo',
+        coordinates: [
+            [4.6475, -74.1023],
+            [4.6650, -74.1200],
+            [4.6970, -74.1420]
+        ],
+        lightingType: 'LED',
+        watts: 200,
+        weather: 'seco',
+        visibility: 3,
+        guardianCai: true,
+        guardianRuta: true
+    },
+    'font_ferrocarril': {
+        id: 'font_ferrocarril',
+        name: 'Ciclorruta Av. Ferrocarril (Cra 68 a Fontibón Centro)',
+        localidad: 'Fontibón (09)',
+        upz: 'UPZ 114 - Modelia',
+        baselineCrime: 'Medio',
+        coordinates: [
+            [4.6450, -74.1130],
+            [4.6580, -74.1280],
+            [4.6710, -74.1430]
+        ],
+        lightingType: 'LED',
+        watts: 150,
+        weather: 'seco',
+        visibility: 2,
+        guardianCai: false,
+        guardianRuta: false
+    },
+
+    // ==========================================
+    // Engativá (10)
+    // ==========================================
+    'enga_calle80': {
+        id: 'enga_calle80',
+        name: 'Ciclorruta Calle 80 (Cra 68 a Portal 80)',
+        localidad: 'Engativá (10)',
+        upz: 'UPZ 75 - Minuto de Dios',
+        baselineCrime: 'Medio',
+        coordinates: [
+            [4.6780, -74.0790],
+            [4.6940, -74.0970],
+            [4.7095, -74.1105]
+        ],
+        lightingType: 'LED',
+        watts: 150,
+        weather: 'seco',
+        visibility: 3,
+        guardianCai: true,
+        guardianRuta: true
+    },
+    'enga_calle63_occidente': {
+        id: 'enga_calle63_occidente',
+        name: 'Ciclorruta Calle 63 (Simón Bolívar a Álamos / SENA)',
+        localidad: 'Engativá (10)',
+        upz: 'UPZ 77 - Las Ferias',
+        baselineCrime: 'Medio',
+        coordinates: [
+            [4.6620, -74.0990],
+            [4.6740, -74.1110],
+            [4.6853, -74.1205]
+        ],
+        lightingType: 'LED',
+        watts: 150,
+        weather: 'seco',
+        visibility: 2,
+        guardianCai: false,
+        guardianRuta: false
+    },
+
+    // ==========================================
+    // Bosa (07) & Tunjuelito (06)
+    // ==========================================
+    'tunj_auto_sur': {
+        id: 'tunj_auto_sur',
+        name: 'Autopista Sur (Sevillana a Alkosto Venecia)',
+        localidad: 'Tunjuelito (06)',
+        upz: 'UPZ 42 - Venecia',
+        baselineCrime: 'Alto',
+        coordinates: [
+            [4.5920, -74.1410],
+            [4.5950, -74.1390],
+            [4.5971, -74.1378]
+        ],
+        lightingType: 'Sodio',
+        watts: 100,
+        weather: 'seco',
+        visibility: 2,
+        guardianCai: true,
+        guardianRuta: false
+    },
+    'tunj_parque_tunal': {
+        id: 'tunj_parque_tunal',
+        name: 'Anillo Perimetral Parque El Tunal',
+        localidad: 'Tunjuelito (06)',
+        upz: 'UPZ 62 - Tunjuelito',
+        baselineCrime: 'Bajo',
+        coordinates: [
+            [4.5761, -74.1332],
+            [4.5790, -74.1310],
+            [4.5770, -74.1280]
+        ],
+        lightingType: 'LED',
+        watts: 200,
+        weather: 'seco',
+        visibility: 3,
+        guardianCai: true,
+        guardianRuta: true
+    },
+    'bosa_porvenir_sur': {
+        id: 'bosa_porvenir_sur',
+        name: 'Alameda El Porvenir (Bosa Recreo a San Bernardino)',
+        localidad: 'Bosa (07)',
+        upz: 'UPZ 84 - Bosa Occidental',
+        baselineCrime: 'Alto',
+        coordinates: [
+            [4.6200, -74.1850],
+            [4.6150, -74.1950],
+            [4.6100, -74.2050]
+        ],
+        lightingType: 'Sodio',
+        watts: 100,
+        weather: 'seco',
+        visibility: 1,
+        guardianCai: false,
+        guardianRuta: false
     }
 };

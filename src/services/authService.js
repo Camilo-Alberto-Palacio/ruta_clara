@@ -249,4 +249,5 @@ class AuthService {
 }
 
 export const authService = new AuthService();
+export { firebaseApp, auth, firebaseConfig };
 export default authService;
