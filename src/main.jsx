@@ -1,15 +1,26 @@
-import { StrictMode } from 'react'
+import { StrictMode, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import 'leaflet/dist/leaflet.css'
 import './index.css'
 import App from './App.jsx'
 import ErrorBoundary from './components/atoms/ErrorBoundary.jsx'
+import SplashScreen from './components/atoms/SplashScreen.jsx'
 import { Capacitor } from '@capacitor/core'
+
+function AppWithSplash() {
+  const [splashDone, setSplashDone] = useState(false);
+  return (
+    <>
+      {!splashDone && <SplashScreen onFinish={() => setSplashDone(true)} />}
+      <App />
+    </>
+  );
+}
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <ErrorBoundary>
-      <App />
+      <AppWithSplash />
     </ErrorBoundary>
   </StrictMode>,
 )
