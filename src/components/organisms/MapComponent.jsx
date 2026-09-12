@@ -1916,21 +1916,16 @@ export default function MapComponent({
                 const bodyEl = el.querySelector('.bike-3d-body');
                 if (bodyEl) {
                     bodyEl.style.transition = arrowTransition;
-                    // En modo Waze 3D, el mapa rota por -newAngle, por lo que la bicicleta siempre mira hacia adelante (0deg) en la pantalla
-                    if (isNavigating && isCameraLocked && camera3DEnabled) {
-                        bodyEl.style.transform = `rotate(0deg) rotateY(${bankAngle}deg)`;
-                    } else {
-                        bodyEl.style.transform = `rotate(${newAngle}deg) rotateY(${bankAngle}deg)`;
-                    }
+                    // El frente de la bicicleta apunta exactamente al sentido de la vía transitada
+                    bodyEl.style.transform = `rotate(${newAngle}deg) rotateY(${bankAngle}deg)`;
                 }
             }
         } else {
             continuousBearingRef.current = targetBearing;
             // 3D Isometric Bicycle Marker (Ruta Clara Metallic Emerald)
-            const initialAngle = (isNavigating && isCameraLocked && camera3DEnabled) ? 0 : newAngle;
             const cyclistIcon = L.divIcon({
                 className: 'ruta-clara-3d-bike-marker',
-                html: render3DBicycleHTML(initialAngle, bankAngle, arrowTransition),
+                html: render3DBicycleHTML(newAngle, bankAngle, arrowTransition),
                 iconSize: [64, 64],
                 iconAnchor: [32, 32]
             });

@@ -16,7 +16,7 @@ import { trafficLights as initialTrafficLights } from './data/trafficLights';
 import { robberyReports } from './data/robberyReports';
 import { accidentPoints } from './data/accidentPoints';
 import { caiPoints } from './data/caiPoints';
-import { fetchBogotaTrafficLights } from './utils/trafficLightsService';
+import { fetchBogotaTrafficLights, getRealtimeLightStatus } from './utils/trafficLightsService';
 import { audioGuidance } from './utils/audioGuidanceService';
 import { soundService } from './utils/soundService';
 import { wakeLockService } from './utils/wakeLockService';
@@ -470,13 +470,14 @@ export default function App() {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [isShortcutsOpen, isOnboardingOpen, isSafeHavenOpen, isInterventionModalOpen, isModelValidationOpen, isPriorityHeatmapOpen, isCptedAuditOpen, isZenMode, selectingLocationMode, isNavigating, navigationMode, generatedRoutes]);
 
-    // A. Auto-cycle Traffic Lights
+    // A. Real-time deterministic Traffic Lights System (Sincronizado al segundo con duraciones reglamentarias)
     useEffect(() => {
         if (!autoCycleActive) return;
         
-        const interval = setInterval(() => {
+        const updateLights = () => {
+            const nowSec = Math.floor(Date.now() / 1000);
             setTrafficLights(prev => prev.map(light => {
-                // If green wave is active for this light, keep it green!
+                // Si la Onda Verde está forzada para esta ruta, mantener en verde con prioridad
                 if (greenWaveActive && activeRouteId) {
                     const activeRoute = generatedRoutes.find(r => r.id === activeRouteId);
                     if (activeRoute) {
@@ -488,21 +489,18 @@ export default function App() {
                             return (distDeg * 111000) <= 40;
                         });
                         if (onRoute) {
-                            return { ...light, state: 'verde' };
+                            return { ...light, state: 'verde', secondsRemaining: 30 };
                         }
                     }
                 }
 
-                // Cycle: verde (5s) -> amarillo (5s) -> rojo (5s) -> verde
-                let nextState = light.state;
-                if (light.state === 'verde') nextState = 'amarillo';
-                else if (light.state === 'amarillo') nextState = 'rojo';
-                else nextState = 'verde';
-                
-                return { ...light, state: nextState };
+                // Cálculo determinista en tiempo real (Verde ~40s, Amarillo 4s, Rojo ~28s)
+                return getRealtimeLightStatus(light, nowSec);
             }));
-        }, 5000);
+        };
 
+        updateLights();
+        const interval = setInterval(updateLights, 1000);
         return () => clearInterval(interval);
     }, [autoCycleActive, greenWaveActive, activeRouteId, generatedRoutes]);
 
@@ -839,11 +837,12 @@ export default function App() {
             if (nearbyLight) {
                 setNextTrafficLight(nearbyLight);
                 if (nearbyLight.state === 'rojo') {
+                    const waitText = nearbyLight.secondsRemaining ? ` (${nearbyLight.secondsRemaining}s para verde)` : '';
                     // Semáforo en rojo: respeto estricto a las normas de tránsito
                     if (distToUpcomingLight > 8) {
                         // 1. Si está aproximándose a la intersección (distancia > 8m): desacelera y avanza de a poco
                         setSpeedKmh(Math.max(3, Math.min(7, Math.round(distToUpcomingLight * 0.15))));
-                        setHudRecommendation(`🚦 Semáforo en ROJO (${nearbyLight.intersection || 'intersección'}). Reduciendo y avanzando de a poco...`);
+                        setHudRecommendation(`🚦 Semáforo en ROJO (${nearbyLight.intersection || 'intersección'})${waitText}. Reduciendo y avanzando de a poco...`);
                         audioGuidance.speakEvent(`light_red_app_${nearbyLight.id || nearbyLight.intersection}`, 'Semáforo en rojo más adelante. Reduce la velocidad.', 20, false);
                         
                         // Avanza de a poco: avanza solo 1 paso cada 2 ticks
@@ -854,13 +853,14 @@ export default function App() {
                     } else {
                         // 2. Línea de parada alcanzada (distancia <= 8m): detención total obligatoria (0 km/h)
                         setSpeedKmh(0);
-                        setHudRecommendation(`🛑 Detenido en luz ROJA (${nearbyLight.intersection || 'intersección'}). Esperando verde...`);
+                        setHudRecommendation(`🛑 Detenido en luz ROJA (${nearbyLight.intersection || 'intersección'})${waitText}. Esperando verde...`);
                         audioGuidance.speakEvent(`light_red_stop_${nearbyLight.id || nearbyLight.intersection}`, 'Semáforo en rojo. Detén la marcha en la línea de parada.', 15, false);
                         
-                        // Fail-safe para simulación: Si permanece detenido más de 4 segundos, ciclar automáticamente a verde
+                        // En simulación, si el semáforo tarda demasiado (más de 8s en simulación rápida), avanza fluidamente
                         stoppedTicksRef.current = (stoppedTicksRef.current || 0) + 1;
-                        if (stoppedTicksRef.current > 25) {
+                        if (stoppedTicksRef.current > (navSpeedMultiplier >= 5 ? 12 : 35)) {
                             nearbyLight.state = 'verde';
+                            nearbyLight.secondsRemaining = 25;
                             stoppedTicksRef.current = 0;
                             setTrafficLights([...trafficLightsRef.current]);
                             audioGuidance.speakEvent(`light_green_${nearbyLight.id || nearbyLight.intersection}`, 'Semáforo cambió a verde. Cruce libre.', 10, false);
@@ -869,14 +869,16 @@ export default function App() {
                     }
                 } else if (nearbyLight.state === 'amarillo') {
                     // 3. Semáforo en amarillo: Pasa con precaución a velocidad moderada (12 km/h) sin frenar a 0
+                    const yelText = nearbyLight.secondsRemaining ? ` (${nearbyLight.secondsRemaining}s)` : '';
                     stoppedTicksRef.current = 0;
                     setSpeedKmh(12);
-                    setHudRecommendation(`🟡 Semáforo en AMARILLO (${nearbyLight.intersection || 'intersección'}). Pasando con precaución.`);
+                    setHudRecommendation(`🟡 Semáforo en AMARILLO (${nearbyLight.intersection || 'intersección'})${yelText}. Pasando con precaución.`);
                     audioGuidance.speakEvent(`light_yellow_${nearbyLight.id || nearbyLight.intersection}`, 'Semáforo en amarillo. Pasando con precaución.', 25, false);
                 } else if (nearbyLight.state === 'verde') {
                     // 4. Semáforo en verde: Cruce libre
+                    const grnText = nearbyLight.secondsRemaining ? ` (${nearbyLight.secondsRemaining}s restantes)` : '';
                     stoppedTicksRef.current = 0;
-                    setHudRecommendation(`🟢 Semáforo en VERDE (${nearbyLight.intersection || 'intersección'}). Cruce libre.`);
+                    setHudRecommendation(`🟢 Semáforo en VERDE (${nearbyLight.intersection || 'intersección'})${grnText}. Cruce libre.`);
                     audioGuidance.speakEvent(`light_green_${nearbyLight.id || nearbyLight.intersection}`, 'Semáforo en verde. Cruce libre.', 25, false);
                 }
             } else {
@@ -2034,6 +2036,10 @@ export default function App() {
         cyclistIndexRef.current = 0;
         setCyclistIndex(0);
         setCyclistCoords(activeRoute.coordinates[0]);
+        if (activeRoute.coordinates && activeRoute.coordinates.length >= 2) {
+            const initBrng = calculateBearing(activeRoute.coordinates[0], activeRoute.coordinates[1]);
+            setCyclistBearing(initBrng);
+        }
         offRouteTicksRef.current = 0;
         isReroutingRef.current = false;
         minDistToDestRef.current = Infinity;

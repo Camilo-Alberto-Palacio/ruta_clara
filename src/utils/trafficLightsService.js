@@ -135,3 +135,65 @@ out body 1200;`;
         };
     }
 }
+
+/**
+ * Genera un offset pseudo-aleatorio pero constante por semáforo
+ * para que no todos los semáforos de la ciudad cambien simultáneamente
+ */
+function getLightOffset(light) {
+    if (light && typeof light.id === 'string') {
+        let hash = 0;
+        for (let i = 0; i < light.id.length; i++) {
+            hash = (hash * 31 + light.id.charCodeAt(i)) & 0xffff;
+        }
+        return hash;
+    }
+    const lat = light?.coordinates?.[0] || 4.5;
+    const lng = light?.coordinates?.[1] || -74.1;
+    return Math.round(Math.abs(lat * 10000 + lng * 10000));
+}
+
+/**
+ * Calcula el estado determinista y confiable en tiempo real de un semáforo (Verde / Amarillo / Rojo)
+ * Duraciones reglamentarias de Bogotá:
+ * - Verde: 38s a 46s (paso seguro para ciclistas y vehículos)
+ * - Amarillo: 4s (tiempo de despeje reglamentario)
+ * - Rojo: 24s a 34s (cruce de vía transversal)
+ * Total ciclo: 65s a 85s
+ */
+export function getRealtimeLightStatus(light, currentTimestampSec = Math.floor(Date.now() / 1000)) {
+    if (!light) return light;
+
+    const baseCycle = typeof light.cycleTime === 'number' && light.cycleTime >= 25 ? light.cycleTime : 35;
+    const cycleTotal = Math.max(65, Math.min(85, baseCycle * 2));
+    const yellowDuration = 4; // 4 segundos de amarillo
+    const greenDuration = Math.round((cycleTotal - yellowDuration) * 0.58); // ~58% verde (~38s-46s)
+    const redDuration = cycleTotal - greenDuration - yellowDuration; // ~23s-35s rojo
+
+    const offset = getLightOffset(light);
+    const phase = (currentTimestampSec + offset) % cycleTotal;
+
+    let state = 'verde';
+    let secondsRemaining = 0;
+
+    if (phase < greenDuration) {
+        state = 'verde';
+        secondsRemaining = greenDuration - phase;
+    } else if (phase < greenDuration + yellowDuration) {
+        state = 'amarillo';
+        secondsRemaining = (greenDuration + yellowDuration) - phase;
+    } else {
+        state = 'rojo';
+        secondsRemaining = cycleTotal - phase;
+    }
+
+    return {
+        ...light,
+        state,
+        secondsRemaining,
+        cycleTotal,
+        greenDuration,
+        redDuration,
+        yellowDuration
+    };
+}
