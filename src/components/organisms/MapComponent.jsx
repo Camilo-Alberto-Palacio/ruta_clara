@@ -254,7 +254,8 @@ export default function MapComponent({
     isCameraLocked = true,
     onCameraLockChange,
     userLocation = null,
-    userHeading = 0
+    userHeading = 0,
+    showFloatingGpsButton = false
 }) {
     // Derive the active route's coordinates for proximity filtering
     const activeRouteCoords = activeRoute ? activeRoute.coordinates : null;
@@ -1087,30 +1088,20 @@ export default function MapComponent({
         });
     }, [generatedRoutes, activeRouteId, simulationState, bikeSegments, mapLayers.trafficJams, citizenReports]);
 
-    // 6a. Intelligent Auto-fit active route inside the visible viewport (accounting for sidebars)
+    // 6a. Close-up street view focus on active route start point and cyclist (UX Móvil)
     useEffect(() => {
         const map = mapRef.current;
         if (!map || isNavigating) return;
 
         if (activeRoute && activeRoute.coordinates && activeRoute.coordinates.length > 0) {
-            const bounds = L.latLngBounds(activeRoute.coordinates);
-            if (bounds.isValid()) {
-                // Dynamically offset bounds so no part of the route is hidden behind bottom sheet or side panels
-                const leftPadding = isMobile ? 25 : (leftDrawerOpen ? 460 : 60);
-                const rightPadding = isMobile ? 25 : (rightDrawerOpen ? 370 : 60);
-                const topPadding = isMobile ? 90 : 60;
-                const bottomPadding = isMobile ? (isBottomSheetExpanded ? 380 : 160) : 60;
-
-                map.fitBounds(bounds, {
-                    paddingTopLeft: [leftPadding, topPadding],
-                    paddingBottomRight: [rightPadding, bottomPadding],
-                    maxZoom: 15,
-                    animate: true,
-                    duration: 0.8
-                });
-            }
+            const startPt = cyclistCoords || activeRoute.coordinates[0];
+            // Vista cercana de la ruta y la bicicleta para ver la calle exacta de partida y hacia dónde coger
+            map.flyTo(startPt, isMobile ? 17.5 : 17, {
+                animate: true,
+                duration: 1.0
+            });
         }
-    }, [activeRouteId, leftDrawerOpen, rightDrawerOpen, isMobile, isNavigating, isBottomSheetExpanded]);
+    }, [activeRouteId, isMobile, isNavigating]);
 
     // 6b. Draw global traffic jam overlay polylines and markers
     useEffect(() => {
@@ -1700,7 +1691,7 @@ export default function MapComponent({
 
             cyclistMarkerRef.current = cyclistMarker;
             if (isNavigating && isCameraLocked) {
-                map.setView(currentPos, 17);
+                map.setView(currentPos, isMobile ? 18 : 17.5);
             }
         }
 
@@ -1710,8 +1701,8 @@ export default function MapComponent({
             const distMeters = currentCenter ? currentCenter.distanceTo(cyclistCoords) : 0;
 
             if (distMeters > 160) {
-                // If recently recentered from far away, re-center preserving current user zoom
-                map.setView(cyclistCoords, map.getZoom());
+                // If recently recentered from far away, re-center in street-level close-up view
+                map.setView(cyclistCoords, Math.max(isMobile ? 17.5 : 17, map.getZoom()));
             } else if (navSpeedMultiplier >= 5) {
                 // At 5x high speed, lock camera synchronously to marker frame
                 map.panTo(cyclistCoords, { animate: false });
@@ -1724,15 +1715,29 @@ export default function MapComponent({
                 });
             }
         }
-    }, [isNavigating, cyclistCoords, cyclistBearing, userLocation, userHeading, isCameraLocked, navSpeedMultiplier]);
+    }, [isNavigating, cyclistCoords, cyclistBearing, userLocation, userHeading, isCameraLocked, navSpeedMultiplier, isMobile]);
 
-    // 9. Zoom to specific coordinates when requested (e.g. from citizen reports panel)
+    // 8b. Snap camera to cyclist in street-level close-up view when navigation begins
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!map) return;
+        if (isNavigating && isCameraLocked) {
+            const target = cyclistCoords || userLocation || (activeRoute && activeRoute.coordinates ? activeRoute.coordinates[0] : null);
+            if (target) {
+                map.flyTo(target, isMobile ? 18 : 17.5, { duration: 0.8 });
+            }
+        }
+    }, [isNavigating, isMobile]);
+
+    // 9. Zoom to specific coordinates when requested (e.g. from citizen reports panel or recenter)
     useEffect(() => {
         const map = mapRef.current;
         if (map && zoomToCoords) {
-            map.flyTo(zoomToCoords, 16, { duration: 1.5 });
+            const zoomLevel = zoomToCoords.zoom || (isMobile ? 18 : 17.5);
+            const target = Array.isArray(zoomToCoords) ? zoomToCoords : [zoomToCoords.lat, zoomToCoords.lng];
+            map.flyTo(target, zoomLevel, { duration: 1.0 });
         }
-    }, [zoomToCoords]);
+    }, [zoomToCoords, isMobile]);
 
     return (
         <div className="map-container-wrapper">
@@ -1747,12 +1752,12 @@ export default function MapComponent({
             )}
 
             {/* Floating "Mi Ubicación GPS" Button (Recentrado instantáneo 1-toque) */}
-            {userLocation && (
+            {showFloatingGpsButton && userLocation && (
                 <button
                     type="button"
                     onClick={() => {
                         if (mapRef.current && userLocation) {
-                            mapRef.current.flyTo([userLocation.lat, userLocation.lng], 17, { duration: 0.8 });
+                            mapRef.current.flyTo([userLocation.lat, userLocation.lng], isMobile ? 18 : 17.5, { duration: 0.8 });
                             if (callbacksRef.current.onCameraLockChange) {
                                 callbacksRef.current.onCameraLockChange(true);
                             }

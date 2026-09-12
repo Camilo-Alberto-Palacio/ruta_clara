@@ -166,17 +166,12 @@ class AudioGuidanceService {
 
         const now = Date.now();
 
-        // Check event cooldown
+        // Check per-event cooldown to avoid spamming the same event repeatedly
         if (eventKey && this.cooldowns.has(eventKey)) {
             const lastTime = this.cooldowns.get(eventKey);
             if ((now - lastTime) < (cooldownSeconds * 1000)) {
                 return false;
             }
-        }
-
-        // Global interval check for non-priority messages
-        if (!isPriority && (now - this.lastSpokenTime) < this.minGlobalIntervalMs) {
-            return false;
         }
 
         if (eventKey) {
@@ -214,13 +209,14 @@ class AudioGuidanceService {
 
         const item = { text: cleanText, isPriority };
 
-        if (isPriority) {
-            this.queue = this.queue.filter(q => q.isPriority);
-            this.queue.unshift(item);
-            this.stopCurrentSpeech();
-        } else {
-            // Avoid duplicate consecutive phrases in queue
-            if (this.queue.length === 0 || this.queue[this.queue.length - 1].text !== cleanText) {
+        // Evitar duplicar frases idénticas en la cola
+        const isDuplicate = this.queue.some(q => q.text === cleanText);
+        if (!isDuplicate) {
+            // Mantenemos el orden secuencial estricto para no cortar el audio que se está hablando.
+            // Si es prioritario, se coloca después del actual para ser el siguiente, pero NUNCA corta la frase en curso.
+            if (isPriority) {
+                this.queue.unshift(item);
+            } else {
                 this.queue.push(item);
             }
         }

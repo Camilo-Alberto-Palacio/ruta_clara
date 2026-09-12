@@ -289,6 +289,8 @@ export default function App() {
     const [nextTrafficLight, setNextTrafficLight] = useState(null);
     const [isCameraLocked, setIsCameraLocked] = useState(true);
     const cyclistIndexRef = useRef(0);
+    const stoppedTicksRef = useRef(0);
+    const redCreepTicksRef = useRef(0);
     const lastRiskLevelRef = useRef('Bajo');
     const [isArrivalModalOpen, setIsArrivalModalOpen] = useState(false);
     const offRouteTicksRef = useRef(0);
@@ -806,37 +808,80 @@ export default function App() {
 
             const currentPt = denseCoords[currIdx];
 
-            // Detect next traffic light within 65m corridor
-            const nearbyLight = trafficLightsRef.current.find(light => {
-                const distDeg = Math.sqrt(
-                    Math.pow(currentPt[0] - light.coordinates[0], 2) + 
-                    Math.pow(currentPt[1] - light.coordinates[1], 2)
-                );
-                return (distDeg * 111000) <= 65;
-            });
+            // Detect next traffic light within 50m corridor ahead on route
+            let nearbyLight = null;
+            let distToUpcomingLight = Infinity;
+
+            for (const light of trafficLightsRef.current) {
+                const distDeg = Math.hypot(currentPt[0] - light.coordinates[0], currentPt[1] - light.coordinates[1]);
+                const distM = distDeg * 111000;
+                if (distM <= 50) {
+                    const lookAheadWindow = denseCoords.slice(currIdx, Math.min(currIdx + 35, denseCoords.length));
+                    let minLightDist = Infinity;
+                    let closestRelIdx = 0;
+                    lookAheadWindow.forEach((pt, relIdx) => {
+                        const d = Math.hypot(pt[0] - light.coordinates[0], pt[1] - light.coordinates[1]);
+                        if (d < minLightDist) {
+                            minLightDist = d;
+                            closestRelIdx = relIdx;
+                        }
+                    });
+
+                    if (closestRelIdx >= 0 && (minLightDist * 111000) <= 30) {
+                        nearbyLight = light;
+                        distToUpcomingLight = distM;
+                        break;
+                    }
+                }
+            }
 
             if (nearbyLight) {
                 setNextTrafficLight(nearbyLight);
                 if (nearbyLight.state === 'rojo') {
-                    setSpeedKmh(0);
-                    setHudRecommendation(`🚦 Semáforo en ROJO en ${nearbyLight.intersection || 'intersección'}. Detén la marcha.`);
-                    audioGuidance.speakEvent(`light_red_${nearbyLight.id || nearbyLight.intersection}`, 'Atención, semáforo en rojo. Detén la marcha.', 20, true);
-                    waitTicks++;
-                    if (waitTicks < 6) {
-                        return; // pause cyclist progression temporarily
+                    // Semáforo en rojo: respeto estricto a las normas de tránsito
+                    if (distToUpcomingLight > 8) {
+                        // 1. Si está aproximándose a la intersección (distancia > 8m): desacelera y avanza de a poco
+                        setSpeedKmh(Math.max(3, Math.min(7, Math.round(distToUpcomingLight * 0.15))));
+                        setHudRecommendation(`🚦 Semáforo en ROJO (${nearbyLight.intersection || 'intersección'}). Reduciendo y avanzando de a poco...`);
+                        audioGuidance.speakEvent(`light_red_app_${nearbyLight.id || nearbyLight.intersection}`, 'Semáforo en rojo más adelante. Reduce la velocidad.', 20, false);
+                        
+                        // Avanza de a poco: avanza solo 1 paso cada 2 ticks
+                        redCreepTicksRef.current = (redCreepTicksRef.current || 0) + 1;
+                        if (redCreepTicksRef.current % 2 !== 0) {
+                            return; // creeping lentamente
+                        }
+                    } else {
+                        // 2. Línea de parada alcanzada (distancia <= 8m): detención total obligatoria (0 km/h)
+                        setSpeedKmh(0);
+                        setHudRecommendation(`🛑 Detenido en luz ROJA (${nearbyLight.intersection || 'intersección'}). Esperando verde...`);
+                        audioGuidance.speakEvent(`light_red_stop_${nearbyLight.id || nearbyLight.intersection}`, 'Semáforo en rojo. Detén la marcha en la línea de parada.', 15, false);
+                        
+                        // Fail-safe para simulación: Si permanece detenido más de 4 segundos, ciclar automáticamente a verde
+                        stoppedTicksRef.current = (stoppedTicksRef.current || 0) + 1;
+                        if (stoppedTicksRef.current > 25) {
+                            nearbyLight.state = 'verde';
+                            stoppedTicksRef.current = 0;
+                            setTrafficLights([...trafficLightsRef.current]);
+                            audioGuidance.speakEvent(`light_green_${nearbyLight.id || nearbyLight.intersection}`, 'Semáforo cambió a verde. Cruce libre.', 10, false);
+                        }
+                        return; // se detiene completamente hasta cambio de luz
                     }
-                } else if (nearbyLight.state === 'verde') {
-                    setHudRecommendation(`🟢 Semáforo en VERDE en ${nearbyLight.intersection || 'intersección'}. Cruce libre.`);
-                    audioGuidance.speakEvent(`light_green_${nearbyLight.id || nearbyLight.intersection}`, 'Semáforo en verde. Cruce libre.', 25, false);
                 } else if (nearbyLight.state === 'amarillo') {
-                    setHudRecommendation(`🟡 Semáforo en AMARILLO en ${nearbyLight.intersection || 'intersección'}. Precaución.`);
-                    audioGuidance.speakEvent(`light_yellow_${nearbyLight.id || nearbyLight.intersection}`, 'Semáforo en amarillo. Precaución.', 25, true);
+                    // 3. Semáforo en amarillo: Pasa con precaución a velocidad moderada (12 km/h) sin frenar a 0
+                    stoppedTicksRef.current = 0;
+                    setSpeedKmh(12);
+                    setHudRecommendation(`🟡 Semáforo en AMARILLO (${nearbyLight.intersection || 'intersección'}). Pasando con precaución.`);
+                    audioGuidance.speakEvent(`light_yellow_${nearbyLight.id || nearbyLight.intersection}`, 'Semáforo en amarillo. Pasando con precaución.', 25, false);
+                } else if (nearbyLight.state === 'verde') {
+                    // 4. Semáforo en verde: Cruce libre
+                    stoppedTicksRef.current = 0;
+                    setHudRecommendation(`🟢 Semáforo en VERDE (${nearbyLight.intersection || 'intersección'}). Cruce libre.`);
+                    audioGuidance.speakEvent(`light_green_${nearbyLight.id || nearbyLight.intersection}`, 'Semáforo en verde. Cruce libre.', 25, false);
                 }
             } else {
+                stoppedTicksRef.current = 0;
                 setNextTrafficLight(null);
             }
-
-            waitTicks = 0;
 
             const nextIdx = Math.min(currIdx + step, denseCoords.length - 1);
             cyclistIndexRef.current = nextIdx;
@@ -859,10 +904,12 @@ export default function App() {
                 setCyclistBearing(brng);
             }
 
-            // Realistic smooth speed (16-22 km/h)
-            const baseSpeed = 19;
-            const variance = Math.sin(nextIdx * 0.2) * 2.5;
-            setSpeedKmh(Math.round(baseSpeed + variance));
+            // Realistic smooth speed (16-22 km/h) for normal riding
+            if (!nearbyLight || nearbyLight.state === 'verde') {
+                const baseSpeed = 19;
+                const variance = Math.sin(nextIdx * 0.2) * 2.5;
+                setSpeedKmh(Math.round(baseSpeed + variance));
+            }
 
             // Waze Turn-by-turn Maneuvers Engine
             if (routeManeuvers && routeManeuvers.length > 0) {
@@ -2437,10 +2484,36 @@ export default function App() {
                 {mapComponent}
             </div>
 
-            {/* Quick Hazard Crowdsourcing FAB (Waze-style 1-touch reporting) */}
-            <div className={`absolute right-4 z-30 pointer-events-auto transition-all ${
-                isNavigating ? 'bottom-28 sm:bottom-32' : (isMobile ? 'bottom-24' : 'bottom-6 right-6')
+            {/* Coordinated Floating Action Controls Stack (GPS Recenter + Quick Hazard Crowdsourcing) */}
+            <div className={`absolute right-4 z-30 pointer-events-auto flex flex-col items-center gap-3.5 transition-all duration-300 ${
+                isNavigating 
+                    ? 'bottom-32 sm:bottom-36' 
+                    : (isMobile ? 'bottom-24' : 'bottom-8 right-6')
             }`}>
+                {/* 1. Floating GPS / Recenter Button */}
+                <button
+                    type="button"
+                    onClick={() => {
+                        const target = (isNavigating && cyclistCoords) 
+                            ? cyclistCoords 
+                            : (userLocation ? [userLocation.lat, userLocation.lng] : null);
+                        if (target) {
+                            setZoomToCoords(target);
+                            setIsCameraLocked(true);
+                        }
+                    }}
+                    className="w-12 h-12 rounded-2xl bg-white hover:bg-emerald-50 text-emerald-600 border border-emerald-200 shadow-xl flex items-center justify-center cursor-pointer active:scale-95 transition-all group"
+                    style={{
+                        boxShadow: '0 8px 24px rgba(16, 185, 129, 0.25)'
+                    }}
+                    title={isNavigating ? "Recentrar cámara en la bicicleta" : "Centrar en mi ubicación GPS"}
+                    aria-label="Centrar en ubicación"
+                    id="btn-my-location"
+                >
+                    <i className="fa-solid fa-location-crosshairs text-lg group-hover:scale-110 transition-transform"></i>
+                </button>
+
+                {/* 2. Quick Hazard Report FAB */}
                 <QuickHazardReportButton
                     onReportHazard={handleQuickHazardReport}
                     onOpenPotholeModal={(typeKey = 'POTHOLE') => {
