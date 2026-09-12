@@ -53,6 +53,25 @@ class AuthService {
         this.currentUser = this.loadStoredUser();
 
         if (Capacitor.isNativePlatform()) {
+            // 1. En Android / iOS nativo: verificar y sincronizar el usuario desde el SDK nativo
+            FirebaseAuthentication.getCurrentUser().then((result) => {
+                if (result && result.user) {
+                    const u = result.user;
+                    const mappedUser = {
+                        uid: u.uid,
+                        displayName: u.displayName || u.email?.split('@')[0] || 'Ciclista Ruta Clara',
+                        email: u.email || '',
+                        photoURL: u.photoUrl || u.photoURL || null,
+                        role: 'Ciclista Ciudadano',
+                        provider: 'google'
+                    };
+                    this.setUser(mappedUser);
+                }
+            }).catch((err) => {
+                console.warn("[AuthService] Error sincronizando usuario nativo al inicio:", err);
+            });
+
+            // 2. Escuchar cambios de estado en el SDK nativo
             FirebaseAuthentication.addListener('authStateChange', (change) => {
                 if (change && change.user) {
                     const u = change.user;
@@ -65,16 +84,12 @@ class AuthService {
                         provider: 'google'
                     };
                     this.setUser(mappedUser);
-                } else if (this.currentUser && this.currentUser.provider === 'google') {
-                    this.setUser(null);
                 }
             }).catch((err) => {
                 console.warn("[AuthService] Error registrando listener nativo:", err);
             });
-        }
-
-        if (auth) {
-            // Manejar retorno de redirección móvil si aplica
+        } else if (auth) {
+            // Manejar retorno de redirección móvil si aplica en navegador web
             getRedirectResult(auth).then((result) => {
                 if (result && result.user) {
                     const fbUser = result.user;
@@ -92,7 +107,7 @@ class AuthService {
                 console.warn("[AuthService] Error en getRedirectResult:", err);
             });
 
-            // Escuchar cambios de estado en tiempo real
+            // Escuchar cambios de estado en tiempo real solo en navegador web
             onAuthStateChanged(auth, (fbUser) => {
                 if (fbUser) {
                     const mappedUser = {
@@ -104,8 +119,6 @@ class AuthService {
                         provider: 'google'
                     };
                     this.setUser(mappedUser);
-                } else if (this.currentUser && this.currentUser.provider === 'google') {
-                    this.setUser(null);
                 }
             });
         }
