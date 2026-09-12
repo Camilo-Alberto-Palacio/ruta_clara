@@ -2512,19 +2512,21 @@ export default function App() {
                             ? cyclistCoords 
                             : (userLocation ? [userLocation.lat, userLocation.lng] : null);
                         if (target) {
-                            setZoomToCoords(target);
+                            setZoomToCoords({ lat: target[0], lng: target[1], zoom: isMobile ? 18.5 : 18 });
                             setIsCameraLocked(true);
                         }
                     }}
-                    className="w-12 h-12 rounded-2xl bg-white hover:bg-emerald-50 text-emerald-600 border border-emerald-200 shadow-xl flex items-center justify-center cursor-pointer active:scale-95 transition-all group"
+                    className={`w-12 h-12 rounded-2xl bg-white hover:bg-emerald-50 text-emerald-600 border border-emerald-200 shadow-xl flex items-center justify-center cursor-pointer active:scale-95 transition-all group ${
+                        isNavigating && !isCameraLocked ? 'ring-3 ring-emerald-500 shadow-emerald-200 animate-pulse' : ''
+                    }`}
                     style={{
                         boxShadow: '0 8px 24px rgba(16, 185, 129, 0.25)'
                     }}
-                    title={isNavigating ? "Recentrar cámara en la bicicleta" : "Centrar en mi ubicación GPS"}
+                    title={isNavigating ? (isCameraLocked ? "Cámara Waze 3D activa" : "📍 Recentrar cámara detrás de la bicicleta") : "Centrar en mi ubicación GPS"}
                     aria-label="Centrar en ubicación"
                     id="btn-my-location"
                 >
-                    <i className="fa-solid fa-location-crosshairs text-lg group-hover:scale-110 transition-transform"></i>
+                    <i className={`fa-solid ${isNavigating ? (isCameraLocked ? 'fa-location-arrow text-emerald-600' : 'fa-location-arrow text-emerald-700 animate-bounce') : 'fa-location-crosshairs'} text-lg group-hover:scale-110 transition-transform`}></i>
                 </button>
 
                 {/* 2. Quick Hazard Report FAB */}
