@@ -2070,6 +2070,45 @@ input:checked+.slider-round:before {
     border: 1px solid var(--border-color);
 }
 
+/* Leaflet Favorite Place Markers & Popups */
+.favorite-marker-container {
+    background: transparent !important;
+    border: none !important;
+}
+
+.fav-marker-pin:hover {
+    transform: translate(-50%, -3px) scale(1.05) !important;
+    z-index: 9999 !important;
+}
+
+.custom-leaflet-popup-favorite .leaflet-popup-content-wrapper {
+    background: #ffffff;
+    color: #0f172a;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 16px !important;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+    padding: 2px;
+}
+
+.custom-leaflet-popup-favorite .leaflet-popup-content {
+    margin: 0.75rem 0.85rem;
+    line-height: 1.4;
+}
+
+.custom-leaflet-popup-favorite .leaflet-popup-tip {
+    background: #ffffff;
+    border: 1.5px solid #e2e8f0;
+}
+
+.trazar-fav-btn:hover {
+    filter: brightness(1.08);
+    transform: translateY(-1px);
+}
+
+.trazar-fav-btn:active {
+    transform: translateY(0);
+}
+
 /* Citizen list section in Left Panel */
 .citizen-reports-list {
     max-height: 220px;

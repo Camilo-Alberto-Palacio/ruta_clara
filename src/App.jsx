@@ -109,7 +109,8 @@ export default function App() {
         trafficJams: true,
         citizenReports: true,
         trafficLights: true,
-        caravans: false
+        caravans: false,
+        favorites: true
     });
 
     const [desktopLayersOpen, setDesktopLayersOpen] = useState(false);
@@ -1923,6 +1924,17 @@ export default function App() {
         setIsBottomSheetExpanded(false);
     };
 
+    // 13b. Seleccionar y Trazar Ruta instantánea a un Sitio Favorito desde el Mapa (Casa, Trabajo, Gym, etc.)
+    const handleSelectFavoriteDestination = (place) => {
+        if (!place || !place.coords) return;
+        handleSelectDestLocation(place.coords, place.label);
+        handleCalculateRoute(null, place.coords, place.label);
+        if (currentUser?.uid) {
+            favoritePlacesService.recordPlaceVisit(currentUser.uid, place.id);
+        }
+        showToast(`🚴 Trazando ruta segura hacia ${place.label}...`, "info");
+    };
+
     // Handler para escape y navegación inmediata a CAI (CU-03)
     const handleNavigateToHaven = async (targetCai) => {
         if (!targetCai) return;
@@ -2156,6 +2168,8 @@ export default function App() {
             rightDrawerOpen={rightDrawerOpen}
             isMobile={isMobile}
             isBottomSheetExpanded={isBottomSheetExpanded}
+            userFavorites={userFavorites}
+            onSelectFavoriteDestination={handleSelectFavoriteDestination}
         />
     );
 

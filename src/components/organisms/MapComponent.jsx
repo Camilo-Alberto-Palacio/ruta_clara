@@ -7,6 +7,23 @@ import { accidentPoints } from '../../data/accidentPoints';
 import { bikeCaravans } from '../../data/bikeCaravans';
 import { calculateRisk, evaluateCoordinateRisk } from '../../utils/riskCalculator';
 import { fetchGeoJSONWithCache } from '../../utils/geoCache';
+import { PLACE_CATEGORIES } from '../../data/bogotaDestinations';
+
+// Paleta de colores vibrantes para categorías de sitios guardados
+const FAVORITE_CATEGORY_COLORS = {
+    home: '#10b981',       // Emerald (Hogar / Casa)
+    work: '#2563eb',       // Azul (Trabajo / Oficina)
+    study: '#d97706',      // Ámbar (Estudio / U)
+    gym: '#ea580c',        // Naranja (Gimnasio / Deporte)
+    shopping: '#0d9488',   // Turquesa (Supermercado)
+    food: '#e11d48',       // Rosa intenso (Café / Restaurante)
+    health: '#dc2626',     // Rojo (Salud / EPS)
+    social: '#db2777',     // Fucsia (Familia / Amigos)
+    bike_shop: '#059669',  // Verde oscuro (Bicaller)
+    park: '#16a34a',       // Verde (Parque / Ciclovía)
+    worship: '#6366f1',    // Índigo (Iglesia)
+    custom: '#475569'      // Pizarra (Personalizado)
+};
 
 // Helper to check if a point is inside a polygon (Ray-Casting Algorithm)
 function isPointInPolygon(point, polygonCoords) {
@@ -236,7 +253,7 @@ export default function MapComponent({
     bikeSegments,
     constructionZones = [],
     showConstruction = true,
-    mapLayers = { localities: true, cais: true, construction: true, accidents: true, robberies: true, trafficJams: true, citizenReports: true, trafficLights: true },
+    mapLayers = { localities: true, cais: true, construction: true, accidents: true, robberies: true, trafficJams: true, citizenReports: true, trafficLights: true, favorites: true },
     trafficJams = [],
     citizenReports = [],
     onUpvoteReport,
@@ -255,7 +272,9 @@ export default function MapComponent({
     onCameraLockChange,
     userLocation = null,
     userHeading = 0,
-    showFloatingGpsButton = false
+    showFloatingGpsButton = false,
+    userFavorites = [],
+    onSelectFavoriteDestination = null
 }) {
     // Derive the active route's coordinates for proximity filtering
     const activeRouteCoords = activeRoute ? activeRoute.coordinates : null;
@@ -275,6 +294,7 @@ export default function MapComponent({
     const citizenReportLayersRef = useRef([]);
     const caravanLayersRef = useRef([]);
     const trafficLightLayersRef = useRef([]);
+    const favoriteLayersRef = useRef([]);
     const cyclistMarkerRef = useRef(null);
     const continuousBearingRef = useRef(null);
     const tileLayerRef = useRef(null);
@@ -288,7 +308,8 @@ export default function MapComponent({
         onSelectRoute,
         onLocalidadChange,
         onUpvoteReport,
-        onCameraLockChange
+        onCameraLockChange,
+        onSelectFavoriteDestination
     };
 
     const isNavigatingRef = useRef(isNavigating);
@@ -974,6 +995,209 @@ export default function MapComponent({
             accidentLayersRef.current.push(marker);
         });
     }, [mapLayers.accidents, activeRoute, currentZoom]);
+
+    // 5f. Sitios Guardados / Favoritos del Ciclista (Casa, Trabajo, Estudio, Gym, etc.)
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!map) return;
+
+        // Limpiar marcadores de sitios favoritos previos
+        favoriteLayersRef.current.forEach(layer => {
+            map.removeLayer(layer);
+        });
+        favoriteLayersRef.current = [];
+
+        // Si la capa de favoritos está desactivada, no dibujar
+        if (mapLayers && mapLayers.favorites === false) return;
+
+        if (!userFavorites || !Array.isArray(userFavorites)) return;
+
+        userFavorites.forEach(place => {
+            if (!place || !place.coords) return;
+            const lat = parseFloat(place.coords.lat);
+            const lng = parseFloat(place.coords.lng);
+            if (isNaN(lat) || isNaN(lng)) return;
+
+            const catMeta = PLACE_CATEGORIES[place.category] || PLACE_CATEGORIES.custom || {
+                label: 'Sitio Guardado',
+                icon: 'fa-solid fa-location-dot',
+                emoji: '📍',
+                color: 'emerald'
+            };
+
+            const catColor = FAVORITE_CATEGORY_COLORS[place.category] || '#10b981';
+            const iconClass = catMeta.icon || 'fa-solid fa-location-dot';
+
+            // Marcador HTML "Bubble Pin" de alto contraste con icono y etiqueta integrada
+            const marker = L.marker([lat, lng], {
+                zIndexOffset: 1200,
+                icon: L.divIcon({
+                    className: 'favorite-marker-container',
+                    html: `
+                        <div class="fav-marker-pin" style="
+                            position: absolute;
+                            bottom: 0;
+                            left: 50%;
+                            transform: translate(-50%, 0);
+                            display: flex;
+                            flex-direction: column;
+                            align-items: center;
+                            cursor: pointer;
+                            pointer-events: auto;
+                            filter: drop-shadow(0 3px 6px rgba(0,0,0,0.3));
+                            transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+                        ">
+                            <div style="
+                                display: inline-flex;
+                                align-items: center;
+                                gap: 6px;
+                                background: #ffffff;
+                                padding: 3px 8px 3px 4px;
+                                border-radius: 9999px;
+                                border: 2px solid ${catColor};
+                                box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+                                white-space: nowrap;
+                            ">
+                                <div style="
+                                    width: 24px;
+                                    height: 24px;
+                                    border-radius: 50%;
+                                    background: ${catColor};
+                                    color: #ffffff;
+                                    display: flex;
+                                    align-items: center;
+                                    justify-content: center;
+                                    font-size: 11px;
+                                    flex-shrink: 0;
+                                    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+                                ">
+                                    <i class="${iconClass}"></i>
+                                </div>
+                                <span style="
+                                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                                    font-weight: 800;
+                                    font-size: 11px;
+                                    color: #0f172a;
+                                    letter-spacing: -0.2px;
+                                    max-width: 110px;
+                                    overflow: hidden;
+                                    text-overflow: ellipsis;
+                                ">
+                                    ${place.label || catMeta.label}
+                                </span>
+                            </div>
+                            <div style="
+                                width: 0;
+                                height: 0;
+                                border-left: 6px solid transparent;
+                                border-right: 6px solid transparent;
+                                border-top: 7px solid ${catColor};
+                                margin-top: -1px;
+                            "></div>
+                        </div>
+                    `,
+                    iconSize: [0, 0],
+                    iconAnchor: [0, 0],
+                    popupAnchor: [0, -38]
+                })
+            });
+
+            // Tarjeta Popup interactiva con acción de 1-toque "Trazar Ruta Aquí"
+            const popupDiv = document.createElement('div');
+            popupDiv.className = 'favorite-popup-inner';
+            popupDiv.innerHTML = `
+                <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; min-width: 210px; padding: 2px;">
+                    <div style="display: flex; align-items: center; gap: 9px; margin-bottom: 8px;">
+                        <div style="
+                            width: 36px;
+                            height: 36px;
+                            border-radius: 12px;
+                            background: ${catColor};
+                            color: #ffffff;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            font-size: 16px;
+                            flex-shrink: 0;
+                            box-shadow: 0 3px 8px rgba(0,0,0,0.2);
+                        ">
+                            <i class="${iconClass}"></i>
+                        </div>
+                        <div style="flex: 1; min-width: 0;">
+                            <span style="font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.6px; color: ${catColor}; display: block;">
+                                ${catMeta.label}
+                            </span>
+                            <h4 style="margin: 0; font-size: 14px; font-weight: 800; color: #0f172a; line-height: 1.25; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">
+                                ${place.label}
+                            </h4>
+                        </div>
+                    </div>
+
+                    ${place.address ? `
+                        <div style="
+                            display: flex;
+                            align-items: flex-start;
+                            gap: 6px;
+                            margin-bottom: 10px;
+                            background: #f8fafc;
+                            padding: 6px 8px;
+                            border-radius: 8px;
+                            border: 1px solid #e2e8f0;
+                        ">
+                            <i class="fa-solid fa-location-dot" style="margin-top: 2px; color: #94a3b8; font-size: 10px; flex-shrink: 0;"></i>
+                            <span style="font-size: 11px; color: #475569; line-height: 1.35;">${place.address}</span>
+                        </div>
+                    ` : ''}
+
+                    <button class="trazar-fav-btn" style="
+                        width: 100%;
+                        padding: 9px 12px;
+                        background: linear-gradient(135deg, #10b981, #059669);
+                        color: #ffffff;
+                        border: none;
+                        border-radius: 10px;
+                        font-size: 12px;
+                        font-weight: 800;
+                        cursor: pointer;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        gap: 7px;
+                        box-shadow: 0 3px 8px rgba(16, 185, 129, 0.35);
+                    ">
+                        <i class="fa-solid fa-diamond-turn-right"></i>
+                        <span>Trazar Ruta Aquí</span>
+                    </button>
+                </div>
+            `;
+
+            const btn = popupDiv.querySelector('.trazar-fav-btn');
+            if (btn) {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    map.closePopup();
+                    if (callbacksRef.current.onSelectFavoriteDestination) {
+                        callbacksRef.current.onSelectFavoriteDestination(place);
+                    }
+                });
+            }
+
+            marker.bindPopup(popupDiv, {
+                className: 'custom-leaflet-popup-favorite',
+                closeButton: true
+            });
+
+            marker.bindTooltip(`<strong>${catMeta.emoji || '📍'} ${place.label}</strong><br/><span style="font-size: 10px; color: #64748b;">${catMeta.label}</span>`, {
+                sticky: true,
+                direction: 'top',
+                offset: [0, -36],
+                className: 'custom-tooltip'
+            });
+
+            marker.addTo(map);
+            favoriteLayersRef.current.push(marker);
+        });
+    }, [userFavorites, mapLayers?.favorites, activeRoute]);
 
     // 6. Draw route polylines dynamically segmented by CPTED risk
     useEffect(() => {

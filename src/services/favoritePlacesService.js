@@ -19,6 +19,29 @@ if (firebaseApp) {
 const LOCAL_STORAGE_PREFIX = 'ruta_clara_favs_';
 const PREFS_STORAGE_PREFIX = 'ruta_clara_prefs_';
 
+export const DEFAULT_INITIAL_FAVORITES = [
+    {
+        id: 'fav_home_demo',
+        category: 'home',
+        label: 'Mi Casa',
+        address: 'Cra 14 # 76 Sur, Usme',
+        coords: { lat: 4.5317, lng: -74.1166 },
+        isDefaultMorning: false,
+        isDefaultEvening: true,
+        visitCount: 5
+    },
+    {
+        id: 'fav_work_demo',
+        category: 'work',
+        label: 'Trabajo / Oficina',
+        address: 'Calle 53 # 13-25, Chapinero',
+        coords: { lat: 4.6425, lng: -74.0658 },
+        isDefaultMorning: true,
+        isDefaultEvening: false,
+        visitCount: 8
+    }
+];
+
 class FavoritePlacesService {
     constructor() {
         this.listeners = new Map();
@@ -41,10 +64,16 @@ class FavoritePlacesService {
     getLocalFavorites(uid = 'guest') {
         try {
             const raw = localStorage.getItem(this.getStorageKey(uid));
-            return raw ? JSON.parse(raw) : [];
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) return parsed;
+            }
+            // Si está vacío, inicializar con sitios de demostración (Casa y Trabajo)
+            this.setLocalFavorites(uid, DEFAULT_INITIAL_FAVORITES);
+            return DEFAULT_INITIAL_FAVORITES;
         } catch (e) {
             console.error("[FavoritePlacesService] Error leyendo favoritos locales:", e);
-            return [];
+            return DEFAULT_INITIAL_FAVORITES;
         }
     }
 

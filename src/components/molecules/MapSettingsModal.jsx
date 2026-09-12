@@ -19,6 +19,7 @@ export default function MapSettingsModal({
     if (!isOpen) return null;
 
     const layerItems = [
+        { key: 'favorites', label: 'Mis Sitios Guardados', icon: 'fa-star', color: '#10b981', desc: 'Casa, trabajo y lugares frecuentes' },
         { key: 'cais', label: 'CAIs de Policía', icon: 'fa-shield-halved', color: '#3b82f6', desc: 'Cuadrantes y refugios' },
         { key: 'citizenReports', label: 'Reportes y Baches', icon: 'fa-burst', color: '#ea580c', desc: 'Huecos e incidentes comunitarios' },
         { key: 'trafficLights', label: 'Semáforos en Vivo', icon: 'fa-traffic-light', color: '#10b981', desc: 'Ciclos y ola verde' },
