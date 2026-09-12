@@ -2142,6 +2142,7 @@ export default function App() {
             onLocationSelect={handleLocationSelect}
             generatedRoutes={generatedRoutes}
             activeRouteId={activeRouteId}
+            activeRoute={activeRoute}
             onSelectRoute={handleSelectRoute}
             simulationState={simulationState}
             bikeSegments={segments}

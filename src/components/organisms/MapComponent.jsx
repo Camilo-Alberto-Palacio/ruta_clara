@@ -298,7 +298,8 @@ export default function MapComponent({
     onSelectFavoriteDestination = null
 }) {
     // Derive the active route's coordinates for proximity filtering
-    const activeRouteCoords = activeRoute ? activeRoute.coordinates : null;
+    const currentActiveRoute = activeRoute || (generatedRoutes && generatedRoutes.find(r => r.id === activeRouteId)) || null;
+    const activeRouteCoords = currentActiveRoute ? currentActiveRoute.coordinates : null;
     const mapContainerRef = useRef(null);
     const mapRef = useRef(null);
     const localidadesLayerRef = useRef(null);
@@ -1930,43 +1931,37 @@ export default function MapComponent({
             const cyclistIcon = L.divIcon({
                 className: 'ruta-clara-3d-bike-marker',
                 html: render3DBicycleHTML(initialAngle, bankAngle, arrowTransition),
-                iconSize: [60, 60],
-                iconAnchor: [30, 30]
+                iconSize: [64, 64],
+                iconAnchor: [32, 32]
             });
 
             const cyclistMarker = L.marker(currentPos, { 
                 icon: cyclistIcon, 
-                zIndexOffset: 3000 
+                zIndexOffset: 5000 
             }).addTo(map);
 
             cyclistMarker.bindTooltip('<strong>🚴 Tu Ubicación</strong> (GPS en vivo)', { 
                 direction: 'top', 
-                offset: [0, -22],
+                offset: [0, -24],
                 className: 'custom-tooltip' 
             });
 
             cyclistMarkerRef.current = cyclistMarker;
             if (isNavigating && isCameraLocked) {
-                const targetPoint = camera3DEnabled 
-                    ? getDestinationPoint(currentPos[0], currentPos[1], targetBearing, isMobile ? 38 : 44)
-                    : currentPos;
-                map.setView(targetPoint, camera3DEnabled ? (isMobile ? 18.5 : 18) : (isMobile ? 18 : 17.5));
+                map.setView(currentPos, isMobile ? 18 : 17.5);
             }
         }
 
         // Camera follow ONLY during active navigation if user has NOT panned away
         if (isNavigating && isCameraLocked && cyclistCoords) {
             const currentCenter = map.getCenter();
-            const forwardDistance = isMobile ? 38 : 44;
-            const targetCenter = camera3DEnabled 
-                ? getDestinationPoint(cyclistCoords[0], cyclistCoords[1], targetBearing, forwardDistance)
-                : cyclistCoords;
+            const targetCenter = cyclistCoords;
 
             const distMeters = currentCenter ? currentCenter.distanceTo(targetCenter) : 0;
 
             if (distMeters > 150) {
-                // Si recientemente se recentró desde lejos, re-centrar en vista de persecución 3D
-                map.setView(targetCenter, camera3DEnabled ? (isMobile ? 18.5 : 18) : (isMobile ? 18 : 17.5));
+                // Si recientemente se recentró desde lejos, re-centrar
+                map.setView(targetCenter, isMobile ? 18 : 17.5);
             } else if (navSpeedMultiplier >= 5) {
                 // A velocidad 5x rápida, bloquear cámara en tiempo real
                 map.panTo(targetCenter, { animate: false });
@@ -1979,11 +1974,11 @@ export default function MapComponent({
                 });
             }
 
-            // Aplicar rotación y perspectiva Waze 3D detrás de la bicicleta
+            // Aplicar rotación de rumbo (Heading-Up) detrás de la bicicleta en primera persona
             if (mapContainerRef.current) {
                 if (camera3DEnabled) {
-                    mapContainerRef.current.style.transform = `perspective(850px) rotateX(50deg) rotateZ(${-newAngle}deg)`;
-                    mapContainerRef.current.style.transformOrigin = '50% 68%';
+                    mapContainerRef.current.style.transform = `rotate(${-newAngle}deg)`;
+                    mapContainerRef.current.style.transformOrigin = 'center center';
                     mapContainerRef.current.style.transition = navSpeedMultiplier >= 5 ? 'transform 0.05s linear' : 'transform 0.12s ease-out';
                 } else {
                     mapContainerRef.current.style.transform = 'none';
@@ -2020,18 +2015,18 @@ export default function MapComponent({
         const map = mapRef.current;
         if (!map) return;
         if (isNavigating && isCameraLocked) {
-            const target = cyclistCoords || userLocation || (activeRoute && activeRoute.coordinates ? activeRoute.coordinates[0] : null);
+            const target = cyclistCoords || userLocation || (currentActiveRoute && currentActiveRoute.coordinates ? currentActiveRoute.coordinates[0] : null);
             if (target) {
                 const targetBrng = cyclistBearing || 0;
-                if (camera3DEnabled) {
-                    const aheadPoint = getDestinationPoint(target[0], target[1], targetBrng, isMobile ? 38 : 44);
-                    map.flyTo(aheadPoint, isMobile ? 18.5 : 18, { duration: 0.8 });
-                    if (mapContainerRef.current) {
-                        mapContainerRef.current.style.transform = `perspective(850px) rotateX(50deg) rotateZ(${-targetBrng}deg)`;
-                        mapContainerRef.current.style.transformOrigin = '50% 68%';
+                map.flyTo(target, isMobile ? 18 : 17.5, { duration: 0.8 });
+                if (mapContainerRef.current) {
+                    if (camera3DEnabled) {
+                        mapContainerRef.current.style.transform = `rotate(${-targetBrng}deg)`;
+                        mapContainerRef.current.style.transformOrigin = 'center center';
+                    } else {
+                        mapContainerRef.current.style.transform = 'none';
+                        mapContainerRef.current.style.transformOrigin = 'center center';
                     }
-                } else {
-                    map.flyTo(target, isMobile ? 18 : 17.5, { duration: 0.8 });
                 }
             }
         }
@@ -2041,36 +2036,31 @@ export default function MapComponent({
     useEffect(() => {
         const map = mapRef.current;
         if (map && zoomToCoords) {
-            const zoomLevel = zoomToCoords.zoom || (camera3DEnabled && isNavigating ? (isMobile ? 18.5 : 18) : (isMobile ? 18 : 17.5));
+            const zoomLevel = zoomToCoords.zoom || (isMobile ? 18 : 17.5);
             const target = Array.isArray(zoomToCoords) ? zoomToCoords : [zoomToCoords.lat, zoomToCoords.lng];
-            if (isNavigating && camera3DEnabled) {
-                const targetBrng = cyclistBearing || 0;
-                const aheadPoint = getDestinationPoint(target[0], target[1], targetBrng, isMobile ? 38 : 44);
-                map.flyTo(aheadPoint, zoomLevel, { duration: 0.8 });
-                if (mapContainerRef.current) {
-                    mapContainerRef.current.style.transform = `perspective(850px) rotateX(50deg) rotateZ(${-targetBrng}deg)`;
-                    mapContainerRef.current.style.transformOrigin = '50% 68%';
+            map.flyTo(target, zoomLevel, { duration: 0.8 });
+            if (mapContainerRef.current) {
+                if (isNavigating && camera3DEnabled) {
+                    const targetBrng = cyclistBearing || 0;
+                    mapContainerRef.current.style.transform = `rotate(${-targetBrng}deg)`;
+                    mapContainerRef.current.style.transformOrigin = 'center center';
+                } else {
+                    mapContainerRef.current.style.transform = 'none';
+                    mapContainerRef.current.style.transformOrigin = 'center center';
                 }
-            } else {
-                map.flyTo(target, zoomLevel, { duration: 0.8 });
             }
         }
     }, [zoomToCoords, isMobile, isNavigating, camera3DEnabled, cyclistBearing]);
 
     return (
         <div className={`map-container-wrapper ${isNavigating && isCameraLocked && camera3DEnabled ? 'waze-3d-active' : ''}`}>
-            {/* Waze Atmospheric Horizon Haze (Difuminado en el horizonte 3D hacia el infinito) */}
-            {isNavigating && isCameraLocked && camera3DEnabled && (
-                <div className="waze-horizon-haze"></div>
-            )}
-
             <div 
                 ref={mapContainerRef} 
                 id="leaflet-map-canvas"
                 style={{ width: '100%', height: '100%', zIndex: 1 }}
             ></div>
 
-            {/* Botón flotante para alternar Cámara 3D Waze (Primera Persona) / 2D Cenital */}
+            {/* Botón flotante para alternar Cámara 3D Primera Persona / 2D Cenital */}
             {isNavigating && (
                 <button
                     type="button"
@@ -2086,13 +2076,13 @@ export default function MapComponent({
                         }
                     }}
                     className="floating-camera-mode-btn"
-                    title={camera3DEnabled ? "Cambiar a vista 2D Cenital (Norte Arriba)" : "Cambiar a vista 3D Waze (Detrás de la Bici)"}
-                    aria-label="Alternar vista 3D Waze"
+                    title={camera3DEnabled ? "Cambiar a vista 2D Cenital (Norte Arriba)" : "Cambiar a vista 3D Primera Persona (Rumbo Arriba)"}
+                    aria-label="Alternar vista 3D primera persona"
                 >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontWeight: 900, fontSize: '11px' }}>
                         <i className={`fa-solid ${camera3DEnabled ? 'fa-cube' : 'fa-compass'}`} style={{ color: camera3DEnabled ? '#10b981' : '#64748b' }}></i>
                         <span style={{ color: camera3DEnabled ? '#065f46' : '#334155' }}>
-                            {camera3DEnabled ? '3D Waze' : '2D'}
+                            {camera3DEnabled ? '3D' : '2D'}
                         </span>
                     </div>
                 </button>

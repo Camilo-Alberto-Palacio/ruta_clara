@@ -1209,48 +1209,32 @@ input:checked+.slider-round:before {
     height: 100%;
     position: relative;
     overflow: hidden;
-    background: #0f172a;
+    background: #f8fafc;
 }
 
-/* Waze 3D First-Person Perspective Stage (Cámara Detrás de la Bicicleta) */
-.map-container-wrapper.waze-3d-active {
-    perspective: 850px;
-    perspective-origin: 50% 68%;
-}
-
+/* Primera Persona / Cámara Detrás de la Bicicleta (Rumbo hacia adelante) */
 .map-container-wrapper.waze-3d-active #leaflet-map-canvas {
-    width: 160% !important;
-    height: 180% !important;
-    top: -40% !important;
-    left: -30% !important;
+    width: 180vmax !important;
+    height: 180vmax !important;
     position: absolute !important;
+    left: calc(50% - 90vmax) !important;
+    top: calc(65% - 90vmax) !important;
+    transform-origin: center center !important;
     will-change: transform;
 }
 
-/* Waze Atmospheric Horizon Haze (Difuminado en el horizonte 3D hacia el infinito) */
-.waze-horizon-haze {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 140px;
-    background: linear-gradient(to bottom, rgba(15, 23, 42, 0.65) 0%, rgba(15, 23, 42, 0.25) 50%, transparent 100%);
-    z-index: 10;
-    pointer-events: none;
-}
-
-/* Botón flotante para alternar Cámara 3D Waze / 2D Cenital */
+/* Botón flotante para alternar Cámara 3D Primera Persona / 2D Cenital */
 .floating-camera-mode-btn {
     position: absolute;
-    top: 96px;
+    top: 104px;
     right: 16px;
     z-index: 25;
-    background: rgba(255, 255, 255, 0.95);
+    background: rgba(255, 255, 255, 0.96);
     backdrop-filter: blur(8px);
     border: 1.5px solid rgba(16, 185, 129, 0.35);
     border-radius: 14px;
     padding: 7px 12px;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
     cursor: pointer;
     transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
@@ -1258,14 +1242,14 @@ input:checked+.slider-round:before {
 .floating-camera-mode-btn:hover {
     transform: scale(1.05);
     background: #ffffff;
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
 }
 
 .floating-camera-mode-btn:active {
     transform: scale(0.95);
 }
 
-/* Ocultar botones de zoom estándar de Leaflet durante el modo Waze 3D */
+/* Ocultar botones de zoom estándar de Leaflet durante el modo primera persona */
 .map-container-wrapper.waze-3d-active .leaflet-control-zoom {
     display: none !important;
 }
