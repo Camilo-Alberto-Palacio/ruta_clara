@@ -1,34 +1,40 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 /**
- * SplashScreen — Muestra el video de animación al iniciar Ruta Clara.
- * Se oculta automáticamente cuando el video termina o si ocurre un error.
- * El prop `onFinish` se llama para ceder el control a la app principal.
+ * SplashScreen — Muestra la animación al iniciar Ruta Clara usando WebP animado.
+ * Al usar <img> en lugar de <video> no aparece ningún ícono ni control de reproducción.
+ * El prop `onFinish` se llama cuando termina la animación o el timeout de seguridad.
+ *
+ * Duración de la animación: ~10s (igual al video original, reducido a 15fps y 480px).
+ * Peso: ~478 KB (vs 1.4 MB del MP4 original).
  */
-export default function SplashScreen({ onFinish }) {
-  const videoRef = useRef(null);
-  const [fading, setFading] = useState(false);
 
-  const handleEnd = () => {
+// Duración de la animación del WebP en milisegundos
+const SPLASH_DURATION_MS = 10000;
+// Duración del fade-out en ms
+const FADE_DURATION_MS = 600;
+
+export default function SplashScreen({ onFinish }) {
+  const [fading, setFading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  const handleFinish = () => {
     setFading(true);
-    // Esperar a que termine la transición CSS antes de desmontar
-    setTimeout(onFinish, 600);
+    setTimeout(onFinish, FADE_DURATION_MS);
   };
 
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    // Intentar reproducir (puede fallar en algunos navegadores sin interacción)
-    video.play().catch(() => {
-      // Si el autoplay falla, terminar splash de inmediato
-      handleEnd();
-    });
-
-    // Seguridad: si el video tarda demasiado (> 8s), saltar
-    const timeout = setTimeout(handleEnd, 8000);
-    return () => clearTimeout(timeout);
+    // Timeout de seguridad: si el WebP no carga en 2s, arrancamos el timer igual
+    const safetyLoad = setTimeout(() => setLoaded(true), 2000);
+    return () => clearTimeout(safetyLoad);
   }, []);
+
+  useEffect(() => {
+    if (!loaded) return;
+    // Una vez cargado, esperar la duración completa del WebP y luego hacer fade-out
+    const timer = setTimeout(handleFinish, SPLASH_DURATION_MS);
+    return () => clearTimeout(timer);
+  }, [loaded]);
 
   return (
     <div
@@ -41,23 +47,19 @@ export default function SplashScreen({ onFinish }) {
         alignItems: 'center',
         justifyContent: 'center',
         opacity: fading ? 0 : 1,
-        transition: 'opacity 0.6s ease-out',
+        transition: `opacity ${FADE_DURATION_MS}ms ease-out`,
         pointerEvents: 'all',
       }}
     >
-      <video
-        ref={videoRef}
-        src="/splash.mp4"
-        autoPlay
-        muted
-        playsInline
-        onEnded={handleEnd}
-        onError={handleEnd}
+      <img
+        src="/splash.webp"
+        alt="Ruta Clara - cargando..."
+        onLoad={() => setLoaded(true)}
+        onError={handleFinish}
         style={{
           width: '100%',
           height: '100%',
           objectFit: 'contain',
-          background: '#ffffff',
         }}
       />
     </div>
