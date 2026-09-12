@@ -2670,7 +2670,7 @@ export default function App() {
                                 </div>
                             </div>
                         )}
-                        {!isBottomSheetExpanded && selectedSegmentId && segments[selectedSegmentId] && (
+                        {!isBottomSheetExpanded && !isNavigating && selectedSegmentId && segments[selectedSegmentId] && (
                             <span className="text-[11px] text-emerald-700 font-semibold mt-1 truncate w-full text-left">
                                 {segments[selectedSegmentId].name.slice(0, 45)}... - Riesgo: {currentPrediction.level}
                             </span>
@@ -2721,7 +2721,7 @@ export default function App() {
                         {(!isBottomSheetExpanded || mobileActiveTab === 'results') && (
                             <div className="flex flex-col gap-4">
                                 {resultsPanelComponent}
-                                {viewMode === 'tech' && (
+                                {currentPrediction.shaps && Object.keys(currentPrediction.shaps).length > 0 && (
                                     <div className="mt-2 border-t border-slate-200 pt-4">
                                         {statsPanelComponent}
                                     </div>
@@ -2744,12 +2744,6 @@ export default function App() {
             {/* Ergonomía Móvil: Barra Inferior en la Zona del Pulgar (Heurística 4 y 7) */}
             {isMobile && !isNavigating && !isMobileSearchOpen && generatedRoutes.length === 0 && !selectedSegmentId && (
                 <MobileBottomDock
-                    onOpenSearch={() => setIsMobileSearchOpen(true)}
-                    onToggleResults={() => {
-                        setIsMobileSearchOpen(true);
-                    }}
-                    hasRoutes={false}
-                    activeRouteCount={0}
                     onEmergencySOS={() => setIsSafeHavenOpen(true)}
                     onOpenLayers={() => setMobileLayersOpen(prev => !prev)}
                     onVoiceSearch={() => setIsVoiceSearchOpen(true)}
@@ -2898,7 +2892,7 @@ export default function App() {
                                     <>
                                         <div className="drawer-divider"></div>
                                         {resultsPanelComponent}
-                                        {viewMode === 'tech' && (
+                                        {currentPrediction.shaps && Object.keys(currentPrediction.shaps).length > 0 && (
                                             <>
                                                 <div className="drawer-divider"></div>
                                                 {statsPanelComponent}
@@ -2915,7 +2909,7 @@ export default function App() {
                                     <>
                                         <div className="drawer-divider"></div>
                                         {resultsPanelComponent}
-                                        {viewMode === 'tech' && (
+                                        {currentPrediction.shaps && Object.keys(currentPrediction.shaps).length > 0 && (
                                             <>
                                                 <div className="drawer-divider"></div>
                                                 {statsPanelComponent}
